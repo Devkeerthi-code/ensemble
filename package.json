@@ -13,7 +13,9 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "postinstall": "prisma generate",
-    "cli:build": "rolldown -c cli/rolldown.config.mjs"
+    "cli:build": "rolldown -c cli/rolldown.config.mjs",
+    "worker": "tsx worker/index.ts",
+    "bench": "tsx scripts/benchmark.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.107",
