@@ -12,7 +12,8 @@
     "test": "vitest run",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "cli:build": "rolldown -c cli/rolldown.config.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",

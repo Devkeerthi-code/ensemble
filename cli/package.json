@@ -1,0 +1,12 @@
+{
+  "name": "ensemble-setup",
+  "version": "0.1.0",
+  "description": "Write safe, explained config files for Claude Code, Codex, Gemini CLI, Cursor and GitHub Copilot into your project.",
+  "type": "module",
+  "bin": { "ensemble-setup": "dist/index.js" },
+  "files": ["dist", "README.md"],
+  "engines": { "node": ">=20" },
+  "keywords": ["claude-code", "agents-md", "cursor-rules", "copilot", "gemini-cli", "ai-setup"],
+  "license": "MIT",
+  "scripts": { "prepublishOnly": "cd .. && npm run cli:build" }
+}
