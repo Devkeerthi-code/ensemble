@@ -221,3 +221,17 @@ describe("tools are safe", () => {
     await expect(assertPublicUrl("file:///etc/passwd")).rejects.toThrow(/http/);
   });
 });
+
+describe("provider rate-limit handling", async () => {
+  const { retryAfterMs, scrubError } = await import("@/lib/orchestrator/policy");
+  it("honours Retry-After and never waits less than 5s on a same-model rate-limit retry", () => {
+    expect(retryAfterMs({ responseHeaders: { "retry-after": "12" } })).toBe(12_000);
+    expect(retryAfterMs({})).toBeUndefined();
+    const n = decideNext({ attempt: 1, failure: "rate_limit", sameModelRetries: 0, retryAfterMs: 9000 }, () => 0);
+    expect(n.action === "retry" && n.delayMs).toBe(9000);
+  });
+  it("scrubs account ids and keys from provider errors", () => {
+    const s = scrubError("Rate limit for org_01m80fft34ed68vstf38206jhe using key gsk_abcdefghijklmnop");
+    expect(s).not.toMatch(/org_01m|gsk_abc/);
+  });
+});

@@ -15,7 +15,7 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
 /** Requests per minute and parallel calls Ensemble allows per provider, kept under typical free-tier limits. */
 export const PROVIDER_LIMITS: Record<Provider, { rpm: number; concurrency: number }> = {
   gemini: { rpm: 10, concurrency: 3 },
-  groq: { rpm: 30, concurrency: 4 },
+  groq: { rpm: 30, concurrency: 2 },
   openrouter: { rpm: 20, concurrency: 3 },
   anthropic: { rpm: 50, concurrency: 4 },
   openai: { rpm: 60, concurrency: 4 },

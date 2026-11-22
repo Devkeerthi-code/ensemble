@@ -29,6 +29,22 @@ export function needsApproval(input: { estimateUsd: number; thresholdUsd: number
 
 export type FailureKind = "rate_limit" | "provider_error" | "timeout" | "bad_request" | "judge_failed";
 
+/** Seconds from a Retry-After header (AI SDK APICallError exposes responseHeaders), as ms. */
+export function retryAfterMs(e: unknown): number | undefined {
+  const headers = (e as { responseHeaders?: Record<string, string> }).responseHeaders;
+  const raw = headers?.["retry-after"] ?? headers?.["Retry-After"];
+  const s = raw ? Number(raw) : NaN;
+  return Number.isFinite(s) && s >= 0 ? Math.min(120_000, Math.ceil(s * 1000)) : undefined;
+}
+
+/** Provider errors can echo account or org ids. Keep the message, drop identifiers. */
+export function scrubError(message: string): string {
+  return message
+    .replace(/\b(org|proj|user|acct)[_-][A-Za-z0-9]{6,}/g, "[id]")
+    .replace(/\b(sk|gsk|AIza)[\w-]{10,}/g, "[key]")
+    .slice(0, 300);
+}
+
 export function classifyError(e: unknown): FailureKind {
   const err = e as { statusCode?: number; status?: number; name?: string; message?: string };
   const status = err.statusCode ?? err.status;
@@ -53,17 +69,19 @@ export function backoffMs(attempt: number, random = Math.random): number {
  * After an attempt: rate limits retry the same model after backoff (once), other failures and
  * failed judgements move to a different model. Never more than MAX_ATTEMPTS.
  */
-export function decideNext(input: { attempt: number; failure?: FailureKind; score?: number; sameModelRetries?: number }, random = Math.random): NextStep {
+export function decideNext(input: { attempt: number; failure?: FailureKind; score?: number; sameModelRetries?: number; retryAfterMs?: number }, random = Math.random): NextStep {
   const { attempt, failure, score } = input;
+  const wait = Math.max(backoffMs(attempt, random), input.retryAfterMs ?? 0);
   if (!failure && (score === undefined || score >= PASS_SCORE)) return { action: "accept" };
-  if (attempt >= MAX_ATTEMPTS) {
+  // Rate limits clear with time, so they get two extra tries before giving up.
+  if (attempt >= (failure === "rate_limit" ? MAX_ATTEMPTS + 2 : MAX_ATTEMPTS)) {
     return { action: "fail", reason: failure ? `Gave up after ${attempt} attempts (last error: ${failure.replace("_", " ")}).` : `Best score ${score}/10 after ${attempt} attempts, below the pass mark of ${PASS_SCORE}.` };
   }
   if (failure === "bad_request") return { action: "retry", switchModel: true, delayMs: 0, reason: "The provider rejected the request, so trying another model." };
   if (failure === "rate_limit" && (input.sameModelRetries ?? 0) === 0) {
-    return { action: "retry", switchModel: false, delayMs: backoffMs(attempt, random), reason: "Rate limited. Waiting, then retrying the same model." };
+    return { action: "retry", switchModel: false, delayMs: Math.max(wait, 5000), reason: "Rate limited. Waiting, then retrying the same model." };
   }
-  if (failure) return { action: "retry", switchModel: true, delayMs: backoffMs(attempt, random), reason: `${failure.replace("_", " ")}: failing over to a different provider.` };
+  if (failure) return { action: "retry", switchModel: true, delayMs: wait, reason: `${failure.replace("_", " ")}: failing over to a different provider.` };
   return { action: "retry", switchModel: true, delayMs: 0, reason: `Judge scored ${score}/10 (pass mark ${PASS_SCORE}). Retrying on a different model.` };
 }
 

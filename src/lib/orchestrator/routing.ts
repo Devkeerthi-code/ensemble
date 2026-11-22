@@ -8,6 +8,8 @@ export type RouteDecision = {
   model: ModelInfo;
   reason: string;
   ranked: Array<{ id: string; total: number; quality: number; speed: number; cheapness: number }>;
+  /** Every candidate with its score, best first, for spill-over when the best provider is busy. */
+  alternatives: Array<{ model: ModelInfo; total: number }>;
 };
 
 const WEIGHTS: Record<Preference, { quality: number; speed: number; cheapness: number }> = {
@@ -72,7 +74,7 @@ export function route({ skill, preference, available, exclude = [], scores = [],
     (runnerUp ? ` Next best: ${runnerUp.m.label} (${runnerUp.total.toFixed(2)} vs ${best.total.toFixed(2)}).` : "") +
     (exclude.length ? ` Skipped after earlier attempts: ${exclude.join(", ")}.` : "");
 
-  return { model: best.m, reason, ranked: ranked.map(({ id, total, quality, speed, cheapness }) => ({ id, total, quality, speed, cheapness })) };
+  return { model: best.m, reason, alternatives: ranked.slice(1).map((x) => ({ model: x.m, total: x.total })), ranked: ranked.map(({ id, total, quality, speed, cheapness }) => ({ id, total, quality, speed, cheapness })) };
 }
 
 /** Exponential moving average so recent behaviour counts, but one bad answer doesn't sink a model. */

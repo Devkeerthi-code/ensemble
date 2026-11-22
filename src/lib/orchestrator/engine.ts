@@ -1,7 +1,7 @@
 import { PROVIDER_LIMITS, costUsd, estimateCostUsd, findModel, modelId, type ModelInfo, type Provider } from "./catalog";
 import { criticalPathLengths, validateDag, type Skill } from "./dag";
 import type { LlmClient, LlmResult } from "./llm";
-import { checkBudget, classifyError, decideNext, needsApproval, RateBucket, type FailureKind } from "./policy";
+import { checkBudget, classifyError, decideNext, needsApproval, RateBucket, retryAfterMs, scrubError, type FailureKind } from "./policy";
 import { AGENT_SYSTEM, JUDGE_SYSTEM, judgePrompt, parseJudge, taskPrompt } from "./prompts";
 import { assembleReport } from "./report";
 import { route, updateScore } from "./routing";
@@ -19,6 +19,8 @@ export type EngineDeps = {
   limiter: ConcurrencyLimiter;
   config: EngineConfig;
   buckets?: Map<Provider, RateBucket>;
+  /** Providers that recently returned 429, avoided by routing until the time given. */
+  cooldowns?: Map<Provider, number>;
   fetchImpl?: typeof fetch;
 };
 
@@ -30,6 +32,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
 };
 
 const NONE: StepResult = { enqueue: [] };
+/** How much lower a model may score and still take over when the best one's provider is at its parallel limit. */
+const SPILL_TOLERANCE = 0.12;
 const TERMINAL = new Set(["done", "failed", "cancelled"]);
 
 function bucketFor(deps: EngineDeps, provider: Provider): RateBucket {
@@ -155,10 +159,13 @@ export async function processTask(deps: EngineDeps, runId: string, key: string):
   }
 
   const creds = await deps.store.credentials(run.userId);
-  const available = Object.keys(creds) as Provider[];
+  const allProviders = Object.keys(creds) as Provider[];
+  const cooling = (p: Provider) => (deps.cooldowns?.get(p) ?? 0) > Date.now();
+  const warm = allProviders.filter((p) => !cooling(p));
+  const available = warm.length ? warm : allProviders;
   const lastModel = task.model && task.provider ? findModel(task.provider, task.model) : undefined;
-  const retrySame = Boolean(lastModel && task.attempts > 0 && !task.triedModels.includes(modelId(lastModel)));
-  const decision = retrySame && lastModel ? { model: lastModel, reason: task.routeReason ?? "" } : route({ skill: task.skill, preference: run.preference, available, exclude: task.triedModels, scores: await deps.store.scores() });
+  const retrySame = Boolean(lastModel && task.attempts > 0 && !task.triedModels.includes(modelId(lastModel)) && !cooling(lastModel.provider));
+  let decision: { model: ModelInfo; reason: string; alternatives?: Array<{ model: ModelInfo; total: number }>; ranked?: Array<{ total: number }> } | null = retrySame && lastModel ? { model: lastModel, reason: task.routeReason ?? "" } : route({ skill: task.skill, preference: run.preference, available, exclude: task.triedModels, scores: await deps.store.scores() });
   if (!decision) return failTask(deps, run, key, available.length ? "Every available model has already been tried for this task." : "No AI provider is configured. Add a key in Settings.");
 
   const upstream = run.tasks.filter((t) => task.dependsOn.includes(t.key)).map((t) => ({ key: t.key, title: t.title, output: t.output ?? "" }));
@@ -181,7 +188,13 @@ export async function processTask(deps: EngineDeps, runId: string, key: string):
     return NONE;
   }
 
-  if (!deps.limiter.tryAcquire(decision.model.provider, run.userId)) return { enqueue: [{ key, priority: 0, delayMs: 750 }] };
+  if (!deps.limiter.tryAcquire(decision.model.provider, run.userId)) {
+    const top = decision.ranked?.[0]?.total ?? 0;
+    const busy = decision.model;
+    const alt = (decision.alternatives ?? []).find((a) => a.model.provider !== busy.provider && a.total >= top - SPILL_TOLERANCE && !cooling(a.model.provider) && deps.limiter.tryAcquire(a.model.provider, run.userId));
+    if (!alt) return { enqueue: [{ key, priority: 0, delayMs: 750 }] };
+    decision = { model: alt.model, reason: `${busy.label} was the best fit but its provider was at its parallel limit, so this spilled over to ${alt.model.label}, the next best on a free provider (${alt.total.toFixed(2)} vs ${top.toFixed(2)}).` };
+  }
   const wait = bucketFor(deps, decision.model.provider).take();
   if (wait > 0) {
     deps.limiter.release(decision.model.provider, run.userId);
@@ -195,6 +208,7 @@ export async function processTask(deps: EngineDeps, runId: string, key: string):
   let attempts: Attempt[] = [];
   let failure: FailureKind | undefined;
   let errorText = "";
+  let retryAfter: number | undefined;
   try {
     const second = copies === 2 ? route({ skill: task.skill, preference: run.preference, available, exclude: [...task.triedModels, modelId(decision.model)], scores: await deps.store.scores() }) : null;
     const settled = await Promise.allSettled([attemptWith(deps, run, task, decision.model, creds, prompt), ...(second ? [attemptWith(deps, run, task, second.model, creds, prompt)] : [])]);
@@ -202,7 +216,12 @@ export async function processTask(deps: EngineDeps, runId: string, key: string):
     const rejected = settled.find((s): s is PromiseRejectedResult => s.status === "rejected");
     if (attempts.length === 0 && rejected) {
       failure = classifyError(rejected.reason);
-      errorText = (rejected.reason as Error).message ?? String(rejected.reason);
+      errorText = scrubError((rejected.reason as Error).message ?? String(rejected.reason));
+      retryAfter = retryAfterMs(rejected.reason);
+      if (failure === "rate_limit") {
+        deps.cooldowns ??= new Map();
+        deps.cooldowns.set(decision.model.provider, Date.now() + (retryAfter ?? 20_000));
+      }
     }
   } finally {
     deps.limiter.release(decision.model.provider, run.userId);
@@ -221,7 +240,7 @@ export async function processTask(deps: EngineDeps, runId: string, key: string):
     await deps.store.event(runId, "compare", { key, results: attempts.map((a) => ({ model: a.model.label, score: a.score ?? null })), picked: best.model.label });
   }
 
-  const next = decideNext({ attempt, failure, score: best?.score, sameModelRetries: retrySame ? 1 : 0 });
+  const next = decideNext({ attempt, failure, score: best?.score, sameModelRetries: retrySame ? 1 : 0, retryAfterMs: retryAfter });
   const tried = best ? [...new Set([...task.triedModels, ...attempts.map((a) => modelId(a.model))])] : task.triedModels;
 
   if (next.action === "retry") {
