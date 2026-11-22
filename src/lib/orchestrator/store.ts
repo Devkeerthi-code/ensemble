@@ -35,6 +35,7 @@ export type RunSnapshot = {
   spentUsd: number;
   createdAt: Date;
   startedAt?: Date | null;
+  finalOutput?: string | null;
   goal: { title: string; criteria: string };
   tasks: RunTask[];
 };
