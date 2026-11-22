@@ -1,8 +1,10 @@
 import next from "eslint-config-next";
 import nextTs from "eslint-config-next/typescript";
 
-export default [
+const config = [
   ...next,
   ...nextTs,
-  { ignores: [".next/**", "node_modules/**", "src/generated/**", "cli/dist/**", "docs/**"] },
+  { ignores: [".next/**", "node_modules/**", "src/generated/**", "cli/dist/**", "docs/**", "next-env.d.ts"] },
 ];
+
+export default config;
