@@ -13,6 +13,11 @@ model User {
   passwordHash String
   createdAt    DateTime       @default(now())
   setups       SetupProfile[]
+  providerKeys ProviderKey[]
+  goals        Goal[]
+  runs         Run[]
+  apiTokens    ApiToken[]
+  approvals    Approval[]
 }
 
 /// A saved questionnaire. Files are regenerated from `answers` + `templateVersion`, so we never store stale output.
@@ -59,4 +64,253 @@ model AuditLog {
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([action, createdAt])
+}
+
+enum ProviderId {
+  gemini
+  groq
+  openrouter
+  anthropic
+  openai
+  ollama
+}
+
+/// User-supplied provider keys, AES-256-GCM encrypted with ENCRYPTION_KEY. Plaintext never leaves the server.
+model ProviderKey {
+  id         String     @id @default(cuid())
+  userId     String
+  provider   ProviderId
+  ciphertext String
+  iv         String     @db.VarChar(32)
+  tag        String     @db.VarChar(32)
+  last4      String     @db.VarChar(4)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+}
+
+/// Personal access token for Ensemble's MCP server. Only the SHA-256 hash is stored.
+model ApiToken {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String    @db.VarChar(60)
+  tokenHash  String    @unique @db.VarChar(64)
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum Priority {
+  high
+  normal
+  low
+}
+
+enum Preference {
+  quality
+  speed
+  cost
+}
+
+model Goal {
+  id         String     @id @default(cuid())
+  userId     String
+  title      String     @db.VarChar(200)
+  criteria   String     @db.VarChar(2000)
+  priority   Priority   @default(normal)
+  budgetUsd  Decimal    @db.Decimal(10, 4)
+  preference Preference @default(quality)
+  createdAt  DateTime   @default(now())
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  runs       Run[]
+
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+enum RunStatus {
+  draft
+  queued
+  running
+  paused
+  completed
+  failed
+  cancelled
+}
+
+model Run {
+  id         String    @id @default(cuid())
+  userId     String
+  goalId     String
+  status     RunStatus @default(draft)
+  priority   Priority  @default(normal)
+  budgetUsd  Decimal   @db.Decimal(10, 4)
+  spentUsd   Decimal   @default(0) @db.Decimal(10, 6)
+  finalOutput String?
+  report     Json?
+  error      String?
+  createdAt  DateTime  @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal       Goal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  tasks      Task[]
+  events     RunEvent[]
+  messages   AgentMessage[]
+  entries    WorkspaceEntry[]
+  approvals  Approval[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status])
+}
+
+enum Skill {
+  research
+  writing
+  coding
+  analysis
+  summarising
+  checking
+}
+
+enum TaskStatus {
+  pending
+  queued
+  running
+  waiting_approval
+  done
+  failed
+  cancelled
+}
+
+model Task {
+  id           String     @id @default(cuid())
+  runId        String
+  key          String     @db.VarChar(40)
+  title        String     @db.VarChar(200)
+  skill        Skill
+  instructions String     @db.VarChar(4000)
+  acceptance   String     @db.VarChar(2000)
+  dependsOn    String[]
+  important    Boolean    @default(false)
+  status       TaskStatus @default(pending)
+  attempts     Int        @default(0)
+  triedModels  String[]
+  provider     ProviderId?
+  model        String?    @db.VarChar(120)
+  routeReason  String?    @db.VarChar(600)
+  inputTokens  Int        @default(0)
+  outputTokens Int        @default(0)
+  costUsd      Decimal    @default(0) @db.Decimal(10, 6)
+  latencyMs    Int?
+  score        Float?
+  judgeNotes   String?    @db.VarChar(1000)
+  output       String?
+  error        String?    @db.VarChar(1000)
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  run          Run        @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, key])
+  @@index([runId, status])
+  @@index([status])
+}
+
+/// Append-only stream the live view reads over SSE. id doubles as the SSE event id.
+model RunEvent {
+  id        BigInt   @id @default(autoincrement())
+  runId     String
+  type      String   @db.VarChar(40)
+  payload   Json
+  createdAt DateTime @default(now())
+  run       Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, id])
+}
+
+enum MessageKind {
+  ask
+  answer
+  handoff
+}
+
+model AgentMessage {
+  id        String      @id @default(cuid())
+  runId     String
+  fromKey   String      @db.VarChar(40)
+  toKey     String?     @db.VarChar(40)
+  kind      MessageKind
+  body      String      @db.VarChar(4000)
+  createdAt DateTime    @default(now())
+  run       Run         @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, createdAt])
+}
+
+/// Shared blackboard for one run. Values are data written by agents, never instructions.
+model WorkspaceEntry {
+  id        String   @id @default(cuid())
+  runId     String
+  key       String   @db.VarChar(80)
+  value     String   @db.VarChar(20000)
+  authorKey String   @db.VarChar(40)
+  updatedAt DateTime @updatedAt
+  run       Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, key])
+}
+
+/// Measured per-model performance, updated after every judged result (exponential moving average).
+model ModelScore {
+  provider  ProviderId
+  model     String     @db.VarChar(120)
+  skill     Skill
+  samples   Int        @default(0)
+  quality   Float      @default(0)
+  latencyMs Float      @default(0)
+  costUsd   Float      @default(0)
+  updatedAt DateTime   @updatedAt
+
+  @@id([provider, model, skill])
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+}
+
+model Approval {
+  id         String         @id @default(cuid())
+  runId      String
+  taskId     String?
+  userId     String
+  kind       String         @db.VarChar(40)
+  summary    String         @db.VarChar(500)
+  details    Json?
+  status     ApprovalStatus @default(pending)
+  createdAt  DateTime       @default(now())
+  decidedAt  DateTime?
+  run        Run            @relation(fields: [runId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
+
+model DailySpend {
+  userId   String
+  day      DateTime @db.Date
+  spentUsd Decimal  @default(0) @db.Decimal(10, 6)
+
+  @@id([userId, day])
+}
+
+/// Global switches such as the kill switch. Read before every model call.
+model SystemSetting {
+  key       String   @id @db.VarChar(40)
+  value     String   @db.VarChar(200)
+  updatedAt DateTime @updatedAt
 }
