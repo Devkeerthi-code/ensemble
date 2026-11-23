@@ -8,7 +8,11 @@ import { randomBytes } from "node:crypto";
  */
 const hasDb = Boolean(process.env.DATABASE_URL && process.env.ENCRYPTION_KEY);
 
-describe.skipIf(!hasDb)("user isolation (database)", async () => {
+describe("user isolation (database)", async () => {
+  if (!hasDb) {
+    it.skip("needs DATABASE_URL and ENCRYPTION_KEY", () => undefined);
+    return;
+  }
   const { db } = await import("@/lib/server/db");
   const runs = await import("@/lib/server/orchestrator/runs");
   const { runSnapshot } = await import("@/lib/server/orchestrator/snapshot");
