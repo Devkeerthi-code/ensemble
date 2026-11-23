@@ -27,7 +27,8 @@ export type EngineDeps = {
 export const DEFAULT_CONFIG: EngineConfig = {
   dayCapUsd: Number(process.env.DAILY_BUDGET_USD ?? 2),
   approvalThresholdUsd: Number(process.env.APPROVAL_THRESHOLD_USD ?? 0.25),
-  maxOutputTokens: 1500,
+  // Reasoning models (Gemini 3.x, gpt-oss) spend part of this on hidden thinking; 1500 truncated real answers.
+  maxOutputTokens: 3000,
   useTools: true,
 };
 
