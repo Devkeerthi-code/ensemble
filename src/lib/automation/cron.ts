@@ -20,10 +20,10 @@ function parseField(part: string, f: Field): Set<number> {
     if (!m) throw new Error(`"${item}" is not a valid cron value`);
     const step = m[2] ? Number(m[2]) : 1;
     if (step < 1) throw new Error("Step must be at least 1");
-    let [lo, hi] = m[1] === "*" ? [f.min, f.max] : m[1]!.split("-").map(Number) as [number, number?];
-    hi ??= m[2] ? f.max : lo;
-    if (lo < f.min || hi! > f.max || lo > hi!) throw new Error(`"${item}" is out of range ${f.min}-${f.max}`);
-    for (let v = lo; v <= hi!; v += step) out.add(v);
+    const [lo, rawHi] = m[1] === "*" ? [f.min, f.max] : (m[1]!.split("-").map(Number) as [number, number?]);
+    const hi = rawHi ?? (m[2] ? f.max : lo);
+    if (lo < f.min || hi > f.max || lo > hi) throw new Error(`"${item}" is out of range ${f.min}-${f.max}`);
+    for (let v = lo; v <= hi; v += step) out.add(v);
   }
   return out;
 }

@@ -5,10 +5,12 @@ import type { RunView } from "@/lib/server/orchestrator/snapshot";
 import type { RunReport } from "@/lib/orchestrator/report";
 import { GraphLegend, TaskGraph } from "@/components/task-graph";
 import { useToast } from "@/components/toast";
+import { RunStatus } from "@/components/run-status";
+import { SubmitButton } from "@/components/submit-button";
 import { approvalAction, rerunAction, runControlAction } from "../../actions";
+import { SaveWorkflowRow } from "./save-workflow";
 
 const money = (n: number) => `$${n.toFixed(n < 0.01 ? 4 : 3)}`;
-const STATUS_TEXT: Record<string, string> = { queued: "Queued", running: "Running", paused: "Paused", completed: "Completed", failed: "Failed", cancelled: "Cancelled", draft: "Draft" };
 
 function elapsed(from: string | null, to: string | null, now: number) {
   if (!from) return "0s";
@@ -22,6 +24,7 @@ export function LiveRun({ initial }: { initial: RunView }) {
   const [connected, setConnected] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const [pending, start] = useTransition();
+  const [saving, setSaving] = useState(false);
   const { toast } = useToast();
   const live = ["running", "queued", "paused"].includes(run.status);
 
@@ -57,17 +60,19 @@ export function LiveRun({ initial }: { initial: RunView }) {
       <div className="panel">
         <div className="panel-h">
           <div className="runbar" aria-live="polite">
-            <b>{STATUS_TEXT[run.status] ?? run.status}</b>
+            <RunStatus status={run.status} />
             {live && !connected && <span className="xs muted">Reconnecting…</span>}
-            {run.error && <span className="small" style={{ color: "var(--accent)" }}>{run.error}</span>}
+            {run.error && <span className="small" role="alert" style={{ color: "var(--accent)", overflowWrap: "anywhere" }}>{run.error}</span>}
           </div>
           <div className="runbar">
             {run.status === "running" && <button className="btn sm" type="button" disabled={pending} onClick={() => control("pause")}>Pause</button>}
             {run.status === "paused" && <button className="btn sm primary" type="button" disabled={pending} onClick={() => control("resume")}>Resume</button>}
             {live && <button className="btn sm ghost" type="button" disabled={pending} onClick={() => control("cancel")}>Cancel</button>}
-            <form action={rerunAction.bind(null, run.id)}><button className="btn sm" type="submit">Re-run as new draft</button></form>
+            {run.status === "completed" && !saving && <button className="btn sm primary" type="button" onClick={() => setSaving(true)}>Save as workflow</button>}
+            <form action={rerunAction.bind(null, run.id)}><SubmitButton pendingText="Copying…">Re-run as new draft</SubmitButton></form>
           </div>
         </div>
+        {saving && run.status === "completed" && <SaveWorkflowRow runId={run.id} defaultName={run.goal.title} onClose={() => setSaving(false)} />}
         <div className="meters">
           <div><b>{done}/{run.tasks.length}</b><small>tasks done</small></div>
           <div><b>{money(run.spentUsd)}</b><small>of {money(run.budgetUsd)} budget</small></div>
@@ -99,6 +104,7 @@ export function LiveRun({ initial }: { initial: RunView }) {
       <div className="run-grid">
         <div className="panel">
           <div className="panel-h"><b>{task?.title ?? "Pick a task"}</b>{task?.score != null && <span className="judge"><b>{task.score}</b><span className="xs muted">/10 judge</span></span>}</div>
+          {!task && <p className="panel-b small muted">Select a task in the graph to see its model, cost and judge notes.</p>}
           {task && (
             <div className="panel-b stack">
               <dl className="kv">
@@ -134,7 +140,7 @@ export function LiveRun({ initial }: { initial: RunView }) {
 
       {run.finalOutput && (
         <div className="panel">
-          <div className="panel-h"><h2 style={{ fontSize: "var(--t-lg)" }}>Final result</h2><button className="btn sm" type="button" onClick={() => navigator.clipboard.writeText(run.finalOutput ?? "").then(() => toast("Copied"))}>Copy</button></div>
+          <div className="panel-h"><h2 style={{ fontSize: "var(--t-lg)" }}>Final result</h2><button className="btn sm" type="button" onClick={() => navigator.clipboard.writeText(run.finalOutput ?? "").then(() => toast("Copied"), () => toast("Couldn't copy. Select the text instead.", { bad: true }))}>Copy</button></div>
           <pre className="panel-b" style={{ whiteSpace: "pre-wrap", margin: 0, fontFamily: "var(--font)", fontSize: "var(--t-sm)" }}>{run.finalOutput}</pre>
         </div>
       )}

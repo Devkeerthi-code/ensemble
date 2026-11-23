@@ -8,6 +8,8 @@ const TABS = [
   { href: "/agents", mark: "C", label: "Subagents" },
   { href: "/doctor", mark: "D", label: "Doctor" },
   { href: "/orchestrator", mark: "E", label: "Orchestrator", auth: true },
+  { href: "/workflows", mark: "F", label: "Workflows", auth: true },
+  { href: "/approvals", mark: "G", label: "Approvals", auth: true },
 ];
 
 export function NavTabs({ signedIn }: { signedIn: boolean }) {

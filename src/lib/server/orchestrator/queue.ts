@@ -1,6 +1,6 @@
 import { PgBoss, type ConstructorOptions } from "pg-boss";
 import type { Enqueue } from "@/lib/orchestrator/engine";
-import { neonPool, useWebSocket } from "../db-transport";
+import { neonPool, websocketTransport } from "../db-transport";
 import { normalisePgUrl } from "../pg-url";
 
 export const TASK_QUEUE = "ensemble-task";
@@ -15,7 +15,7 @@ export function directDatabaseUrl(): string {
 
 /** Connection options for pg-boss: TCP by default, or a Neon WebSocket pool when port 5432 is blocked. */
 export function bossConnection(max: number): ConstructorOptions {
-  if (!useWebSocket()) return { connectionString: directDatabaseUrl(), max };
+  if (!websocketTransport()) return { connectionString: directDatabaseUrl(), max };
   const pool = neonPool(directDatabaseUrl());
   return { db: { executeSql: async (text, values) => ({ rows: (await pool.query(text, values as unknown[])).rows }) } };
 }

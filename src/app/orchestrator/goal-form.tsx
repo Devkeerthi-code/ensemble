@@ -5,17 +5,18 @@ import { createGoalAction, type FormState } from "./actions";
 
 export function GoalForm({ maxBudget }: { maxBudget: number }) {
   const [state, action, pending] = useActionState<FormState, FormData>(createGoalAction, {});
-  const err = (k: string) => state.fieldErrors?.[k] && <span className="err">{state.fieldErrors[k]}</span>;
+  const err = (k: string) => state.fieldErrors?.[k] && <span className="err" id={`${k}-err`}>{state.fieldErrors[k]}</span>;
+  const invalid = (k: string) => (state.fieldErrors?.[k] ? { "aria-invalid": true, "aria-describedby": `${k}-err` } : {});
   return (
     <form action={action} className="brief" noValidate>
       <div className="field">
         <label htmlFor="title">Goal</label>
-        <textarea id="title" name="title" rows={3} required maxLength={200} placeholder="Research the three cheapest ways for our college club to host a website and write a recommendation." style={{ fontFamily: "var(--font)", fontSize: "var(--t-sm)" }} />
+        <textarea id="title" name="title" {...invalid("title")} rows={3} required maxLength={200} placeholder="Research the three cheapest ways for our college club to host a website and write a recommendation." style={{ fontFamily: "var(--font)", fontSize: "var(--t-sm)" }} />
         {err("title")}
       </div>
       <div className="field">
         <label htmlFor="criteria">Done when</label>
-        <textarea id="criteria" name="criteria" rows={2} required maxLength={2000} placeholder="A one-page brief with prices, pros and cons, sources, and a clear pick." style={{ fontFamily: "var(--font)", fontSize: "var(--t-sm)" }} />
+        <textarea id="criteria" name="criteria" {...invalid("criteria")} rows={2} required maxLength={2000} placeholder="A one-page brief with prices, pros and cons, sources, and a clear pick." style={{ fontFamily: "var(--font)", fontSize: "var(--t-sm)" }} />
         {err("criteria")}
       </div>
       <div className="two">
@@ -25,13 +26,13 @@ export function GoalForm({ maxBudget }: { maxBudget: number }) {
         </div>
         <div className="field">
           <label htmlFor="budgetUsd">Budget cap (USD)</label>
-          <input id="budgetUsd" name="budgetUsd" className="input" type="number" min={0.01} max={maxBudget} step={0.01} defaultValue={0.2} required />
+          <input id="budgetUsd" name="budgetUsd" {...invalid("budgetUsd")} className="input" inputMode="decimal" type="number" min={0.01} max={maxBudget} step={0.01} defaultValue={0.2} required />
           {err("budgetUsd")}
         </div>
       </div>
-      <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+      <fieldset className="plain">
         <legend className="label">Prefer</legend>
-        <div className="seg" role="radiogroup" style={{ marginTop: "var(--s2)" }}>
+        <div className="seg">
           {(["quality", "speed", "cost"] as const).map((p, i) => (
             <label key={p}><input type="radio" name="preference" value={p} defaultChecked={i === 0} /><span>{p[0]!.toUpperCase() + p.slice(1)}</span></label>
           ))}

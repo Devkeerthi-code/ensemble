@@ -46,11 +46,11 @@ export function TokenCreator() {
   const command = token ? `claude mcp add --transport http ensemble ${origin}/api/mcp --header "Authorization: Bearer ${token}"` : "";
   return (
     <div className="stack" style={{ gap: "var(--s2)" }}>
-      <div><button className="btn sm" type="button" disabled={pending} onClick={() => start(async () => { const r = await createTokenAction(); if (r.token) setToken(r.token); else toast(r.error ?? "Failed", { bad: true }); })}>Create a token</button></div>
+      <div><button className="btn sm" type="button" disabled={pending} onClick={() => start(async () => { const r = await createTokenAction(); if (r.token) setToken(r.token); else toast(r.error ?? "Couldn't create a token", { bad: true }); })}>{pending ? "Creating…" : "Create a token"}</button></div>
       {token && (
         <>
           <p className="small"><b>Copy this now. It won&apos;t be shown again.</b></p>
-          <div className="npx"><code style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{command}</code><button className="btn sm" type="button" onClick={() => navigator.clipboard.writeText(command).then(() => toast("Command copied"))}>Copy</button></div>
+          <div className="npx"><code style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{command}</code><button className="btn sm" type="button" onClick={() => navigator.clipboard.writeText(command).then(() => toast("Command copied"), () => toast("Couldn't copy. Select the text instead.", { bad: true }))}>Copy</button></div>
         </>
       )}
     </div>

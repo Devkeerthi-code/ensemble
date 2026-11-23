@@ -3,6 +3,7 @@ import Link from "next/link";
 import { db } from "@/lib/server/db";
 import { requireUser } from "@/lib/server/session";
 import { credentialsFor } from "@/lib/server/orchestrator/keys";
+import { RunStatus } from "@/components/run-status";
 import { GoalForm } from "./goal-form";
 
 export const metadata: Metadata = { title: "Orchestrator" };
@@ -31,24 +32,24 @@ export default async function OrchestratorPage() {
       <div className="orch">
         <div className="panel panel-b" style={{ alignSelf: "start" }}>
           {providers.length === 0 ? (
-            <div className="stack"><b>Add an AI provider first</b><p className="small muted">Ensemble needs at least one key (Groq and Gemini have free tiers).</p><Link className="btn primary" href="/settings">Add a key</Link></div>
+            <div className="stack" style={{ gap: "var(--s3)" }}><b>Add an AI provider first</b><p className="small muted">Ensemble needs at least one API key to plan and run goals. Groq and Gemini both have free tiers.</p><div><Link className="btn primary" href="/settings">Add a key</Link></div></div>
           ) : (
             <GoalForm maxBudget={maxBudget} />
           )}
         </div>
         <div className="panel">
-          <div className="panel-h"><b>Your runs</b>{approvals > 0 && <span className="small" style={{ color: "var(--accent)", fontWeight: 600 }}>{approvals} waiting for your approval</span>}</div>
+          <div className="panel-h"><h2 className="label">Your runs</h2>{approvals > 0 && <Link className="small" href="/approvals" style={{ color: "var(--accent)", fontWeight: 600 }}>{approvals} waiting for your approval</Link>}</div>
           {runs.length === 0 ? (
             <div className="empty">
               <svg viewBox="0 0 180 70" aria-hidden="true"><g stroke="var(--rule)">{[15, 25, 35, 45, 55].map((y) => <line key={y} x1="0" x2="180" y1={y} y2={y} />)}</g><rect x="80" y="25" width="20" height="6" fill="var(--ink)" /></svg>
               <b>No runs yet</b>
-              <p className="small muted">Try: &ldquo;Compare three free note-taking apps for engineering students and write a one-page recommendation.&rdquo;</p>
+              <p className="small muted" style={{ maxWidth: "46ch" }}>Write a goal on the left. Try: &ldquo;Compare three free note-taking apps for engineering students and write a one-page recommendation.&rdquo;</p>
             </div>
           ) : (
             <ul className="card-list">
               {runs.map((r) => (
                 <li key={r.id}>
-                  <div><Link href={`/orchestrator/runs/${r.id}`}><b>{r.goal.title}</b></Link><p className="xs muted">{r.status} · {r._count.tasks} tasks · ${Number(r.spentUsd).toFixed(4)} · {r.createdAt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</p></div>
+                  <div className="stack" style={{ gap: "var(--s1)" }}><Link href={`/orchestrator/runs/${r.id}`}><b>{r.goal.title}</b></Link><p className="meta-row"><RunStatus status={r.status} /><span>{r._count.tasks} tasks</span><span>${Number(r.spentUsd).toFixed(4)}</span><span>{r.createdAt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span></p></div>
                   <Link className="btn sm" href={`/orchestrator/runs/${r.id}`}>{r.status === "draft" ? "Review plan" : "Open"}</Link>
                 </li>
               ))}

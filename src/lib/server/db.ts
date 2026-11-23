@@ -3,7 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
 import { PrismaClient } from "@/generated/prisma/client";
-import { useWebSocket } from "./db-transport";
+import { websocketTransport } from "./db-transport";
 import { normalisePgUrl } from "./pg-url";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
@@ -12,7 +12,7 @@ function createClient(): PrismaClient {
   const raw = process.env.DATABASE_URL;
   if (!raw) throw new Error("DATABASE_URL is not set. Copy .env.example to .env and fill it in.");
   const connectionString = normalisePgUrl(raw);
-  if (useWebSocket()) {
+  if (websocketTransport()) {
     neonConfig.webSocketConstructor = ws;
     return new PrismaClient({ adapter: new PrismaNeon({ connectionString }) });
   }
