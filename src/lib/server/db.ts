@@ -1,13 +1,22 @@
+import { PrismaNeon } from "@prisma/adapter-neon";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { neonConfig } from "@neondatabase/serverless";
+import ws from "ws";
 import { PrismaClient } from "@/generated/prisma/client";
+import { useWebSocket } from "./db-transport";
 import { normalisePgUrl } from "./pg-url";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function createClient(): PrismaClient {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) throw new Error("DATABASE_URL is not set. Copy .env.example to .env and fill it in.");
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString: normalisePgUrl(connectionString) }) });
+  const raw = process.env.DATABASE_URL;
+  if (!raw) throw new Error("DATABASE_URL is not set. Copy .env.example to .env and fill it in.");
+  const connectionString = normalisePgUrl(raw);
+  if (useWebSocket()) {
+    neonConfig.webSocketConstructor = ws;
+    return new PrismaClient({ adapter: new PrismaNeon({ connectionString }) });
+  }
+  return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 }
 
 /** One client per process; reused across hot reloads in development. */

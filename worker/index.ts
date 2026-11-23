@@ -6,7 +6,7 @@ import { DEFAULT_CONFIG, processTask, reconcileRun, type EngineDeps } from "../s
 import { ConcurrencyLimiter } from "../src/lib/orchestrator/scheduler";
 import { db } from "../src/lib/server/db";
 import { prismaStore } from "../src/lib/server/orchestrator/prisma-store";
-import { directDatabaseUrl, enqueueTasks, TASK_QUEUE, type TaskJob } from "../src/lib/server/orchestrator/queue";
+import { bossConnection, enqueueTasks, TASK_QUEUE, type TaskJob } from "../src/lib/server/orchestrator/queue";
 import { track } from "../src/lib/server/telemetry";
 
 const CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? 8);
@@ -33,7 +33,7 @@ async function recover(boss: PgBoss) {
 }
 
 async function main() {
-  const boss = new PgBoss({ connectionString: directDatabaseUrl(), max: CONCURRENCY + 2 });
+  const boss = new PgBoss(bossConnection(CONCURRENCY + 2));
   boss.on("error", (e) => log("queue error", { error: e.message }));
   await boss.start();
   await boss.createQueue(TASK_QUEUE).catch(() => undefined);

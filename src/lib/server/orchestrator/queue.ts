@@ -1,5 +1,6 @@
-import { PgBoss } from "pg-boss";
+import { PgBoss, type ConstructorOptions } from "pg-boss";
 import type { Enqueue } from "@/lib/orchestrator/engine";
+import { neonPool, useWebSocket } from "../db-transport";
 import { normalisePgUrl } from "../pg-url";
 
 export const TASK_QUEUE = "ensemble-task";
@@ -12,12 +13,19 @@ export function directDatabaseUrl(): string {
   return normalisePgUrl(process.env.DIRECT_DATABASE_URL ? url : url.replace("-pooler.", "."));
 }
 
+/** Connection options for pg-boss: TCP by default, or a Neon WebSocket pool when port 5432 is blocked. */
+export function bossConnection(max: number): ConstructorOptions {
+  if (!useWebSocket()) return { connectionString: directDatabaseUrl(), max };
+  const pool = neonPool(directDatabaseUrl());
+  return { db: { executeSql: async (text, values) => ({ rows: (await pool.query(text, values as unknown[])).rows }) } };
+}
+
 const g = globalThis as unknown as { boss?: Promise<PgBoss> };
 
 /** Web-side client: sends jobs only. Migrations and maintenance run in the worker. */
 export function senderBoss(): Promise<PgBoss> {
   g.boss ??= (async () => {
-    const boss = new PgBoss({ connectionString: directDatabaseUrl(), supervise: false, schedule: false, migrate: false, max: 2 });
+    const boss = new PgBoss({ ...bossConnection(2), supervise: false, schedule: false, migrate: false });
     boss.on("error", () => undefined);
     await boss.start();
     return boss;
