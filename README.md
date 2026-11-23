@@ -9,7 +9,10 @@ Set up AI coding tools safely, with every generated line explained, then run tea
 |---|---|---|
 | ![Home](docs/screenshots/home.png) | ![Suggested subagents](docs/screenshots/studio-suggestions-1280.png) | ![Suggestions on a phone](docs/screenshots/studio-suggestions-360.png) |
 
-<!-- TODO: add screenshots of Doctor and a finished Orchestrator run (needs a network that allows Postgres port 5432). -->
+
+| Live run (agents, models, cost) | Plan review before running | Workflows | Approvals inbox |
+|---|---|---|---|
+| ![Live run](docs/screenshots/live-run.png) | ![Plan editor](docs/screenshots/plan-editor.png) | ![Workflows](docs/screenshots/workflows.png) | ![Approvals](docs/screenshots/approvals.png) |
 
 ## Who is this for and what problem does it solve?
 
