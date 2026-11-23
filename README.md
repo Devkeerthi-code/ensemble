@@ -2,7 +2,8 @@
 
 Set up AI coding tools safely, with every generated line explained, then run teams of AI agents across several providers in parallel, under a hard budget.
 
-**Live demo:** TODO: add the Vercel link after deploying.
+**Live app:** TODO: add the Vercel link after deploying.
+**Interactive demo (no sign-up, demo data):** https://devkeerthi-code.github.io/ensemble/ (published by `.github/workflows/pages.yml` once GitHub Pages is enabled).
 
 | Home | Suggested helpers for your project (desktop) | Phone (360px) |
 |---|---|---|
@@ -63,6 +64,22 @@ Set up AI coding tools safely, with every generated line explained, then run tea
   - an audit log;
   - every query is scoped to the signed-in user.
 
+**Automation (Phase 3)**
+- **Workflows from templates:**
+  - "Research a topic and write a brief": three research agents run in parallel, then compare, then write.
+  - "Review a GitHub repo": reads the README and file tree, reviews quality and security in parallel, then writes a prioritised report.
+  - "Summarise documents and draft a reply": the pasted text goes into the run workspace as data, never into instructions.
+- **Save any finished run as a workflow:** its reviewed plan is reused as-is.
+- **Schedules:** standard 5-field cron in UTC, at most hourly.
+  - `/api/cron` is protected by `CRON_SECRET` (Bearer header, constant-time compare) and is meant to be called by cron-job.org.
+  - Each due workflow is claimed atomically, so overlapping calls never double-run.
+- **Webhooks:** `POST /api/hooks/<workflowId>` with a per-workflow token (only its hash is stored), optional `{"inputs": {...}}`, and a rate limit.
+- **Human in the loop:**
+  - Delivering results outside Ensemble (to a Slack, Discord, Teams, Zapier or Make incoming webhook) always waits in the **Approvals** inbox with a preview.
+  - It is sent only after you approve it, the URL is re-checked at send time, and approvals are claimed atomically so a double-click can't send twice.
+  - Spending above the threshold also waits for approval.
+  - Agents have no tool that sends, deletes or pays, so nothing irreversible can run automatically.
+
 Usage tracking stores counts only (event name and time), which you can see in `/admin`.
 
 ## Tech stack
@@ -80,6 +97,8 @@ flowchart LR
     SA[Server actions + zod]
     SSE["/api/runs/:id/events (SSE)"]
     MCP["/api/mcp (MCP server, token auth)"]
+    CRON["/api/cron (CRON_SECRET)"]
+    HOOK["/api/hooks/:id (workflow token)"]
     GEN[Template engine - pure, also runs in browser and CLI]
   end
   subgraph Worker["Worker on Render/Railway (npm run worker)"]
@@ -93,6 +112,9 @@ flowchart LR
   UI --> SA --> DB
   UI <-- snapshots --> SSE --> DB
   MCP --> DB
+  CJ[cron-job.org] --> CRON --> DB
+  EXT[Zapier / forms / CI] --> HOOK --> DB
+  ENG -. delivery waits for approval .-> DB
   SA -- enqueue --> DB
   DB -- jobs --> ENG
   ENG <--> TOOLS
@@ -168,7 +190,7 @@ Needs Node 20+ and a Postgres database (a free Neon project works).
 ```bash
 cp .env.example .env        # fill in DATABASE_URL, AUTH_SECRET, ENCRYPTION_KEY, at least one provider key
 npm install                 # also generates the Prisma client
-npx prisma migrate deploy   # creates the tables
+npx prisma migrate deploy   # creates the tables (on a network that blocks port 5432: set DATABASE_TRANSPORT=websocket and run npm run db:deploy:ws)
 npm run dev                 # web app on http://localhost:3000
 npm run worker              # in a second terminal: runs Orchestrator tasks
 ```
@@ -187,6 +209,8 @@ CLI: `npm run cli:build`, then `node cli/dist/index.js init --preset <code>`. To
    - Optionally set `DIRECT_DATABASE_URL` to Neon's non-pooled URL, and `WORKER_CONCURRENCY`.
    - Render's free web services sleep, so use a background worker (paid starter) or Railway's free trial credits for an always-on worker.
 4. **MCP:** in the deployed app, go to Settings → "Create a token" and run the `claude mcp add --transport http …` command it shows.
+5. **Schedules:** set `CRON_SECRET` on Vercel. On cron-job.org, create a job that calls `GET https://<your-app>/api/cron` every 5 minutes with the header `Authorization: Bearer <CRON_SECRET>`.
+6. **Demo page:** in the GitHub repo, go to Settings → Pages → Source: GitHub Actions. The `pages.yml` workflow publishes `docs/design-concept` on the next push.
 
 ## Limitations and what breaks at scale
 
@@ -195,7 +219,8 @@ CLI: `npm run cli:build`, then `node cli/dist/index.js init --preset <code>`. To
 - **SSE polls once a second per open run view.** That's fine for tens of viewers. Thousands would need LISTEN/NOTIFY on a direct connection or a pub/sub service, and Vercel function time limits make SSE reconnect every few minutes.
 - **The capability table is a prior I wrote.** It's based on public benchmarks, not ground truth. Prices are list prices checked on 2026-11-22 and will drift. Cost estimates before a call are upper bounds (characters ÷ 4 plus the full output allowance).
 - **The judge is an LLM.** It can be wrong or lenient, and a judge from a different provider is used when available.
-- **Phase 3 is not built yet:** saved workflows, cron schedules, webhooks, and approval gating for external actions such as sending email. Today no agent has any tool with external effects, so the approval gate is used for spend above the threshold.
+- **Schedule timing depends on the cron caller.** Schedules fire when cron-job.org calls `/api/cron`, so timing is only as precise as that ping (5 minutes). Delivery supports only incoming-webhook services; there is no email sending.
+- **The WebSocket transport is Neon-specific.** `DATABASE_TRANSPORT=websocket` uses Neon's serverless driver and only works with Neon.
 - **Rate limiting uses Postgres counters.** That's fine at this scale, not for high-traffic abuse protection.
 - **Doctor checks format and safety, not intent.** It can't tell whether your instructions are good.
 
@@ -203,6 +228,7 @@ CLI: `npm run cli:build`, then `node cli/dist/index.js init --preset <code>`. To
 
 - Claude Code: [subagents](https://code.claude.com/docs/en/sub-agents) · [settings and permissions](https://code.claude.com/docs/en/settings) · [skills / slash commands](https://code.claude.com/docs/en/slash-commands) · [MCP and .mcp.json](https://code.claude.com/docs/en/mcp) · [CLAUDE.md memory](https://code.claude.com/docs/en/memory)
 - [AGENTS.md](https://agents.md/) · [Gemini CLI GEMINI.md](https://geminicli.com/docs/cli/gemini-md/) · [Cursor rules](https://cursor.com/docs/context/rules) · [GitHub Copilot repository instructions](https://docs.github.com/en/copilot/how-tos/configure-custom-instructions/add-repository-instructions)
+- [cron-job.org](https://cron-job.org/) (scheduled HTTP calls with custom headers) · [Slack incoming webhooks](https://api.slack.com/messaging/webhooks) · [Discord webhooks](https://discord.com/developers/docs/resources/webhook) · [Neon serverless driver](https://neon.tech/docs/serverless/serverless-driver) and `@prisma/adapter-neon`
 - Vercel AI SDK 7 docs bundled in `node_modules/ai/docs` (generateText, `Output.object`, tools, `isStepCount`, `prepareStep`). Provider packages: `@ai-sdk/google` (`createGoogle`), `@ai-sdk/groq`, `@ai-sdk/anthropic`, `@ai-sdk/openai`, `@openrouter/ai-sdk-provider`, `ollama-ai-provider-v2`.
 - pg-boss 12 type definitions (`send`, `work` with `localConcurrency`, `startAfter`, `singletonKey`) · MCP TypeScript SDK 1.32 (`McpServer.registerTool`, `InMemoryTransport`, `WebStandardStreamableHTTPServerTransport`) · Next.js 16 docs bundled in `node_modules/next/dist/docs` · Prisma 7 config (`prisma.config.ts`, driver adapters).
 - Model IDs and prices: live model lists from the Gemini, Groq and OpenRouter APIs, 2026-11-22.
@@ -217,7 +243,7 @@ CLI: `npm run cli:build`, then `node cli/dist/index.js init --preset <code>`. To
 ## What I'd improve next
 
 - Token-aware rate limiting per provider and a shared limiter across workers.
-- Phase 3: saved workflow templates, cron and webhook triggers, and approvals for external actions.
+- Workflow run history charts (cost and quality over time) and a template gallery that users can share.
 - Screenshot-based visual tests and keyboard reordering in the plan graph (Alt+Arrow).
 
 ## GitHub
