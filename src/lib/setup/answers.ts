@@ -45,7 +45,19 @@ export const CAUTION_LEVELS = {
 } as const;
 export type Caution = keyof typeof CAUTION_LEVELS;
 
-export const AGENT_IDS = ["ui-designer", "code-reviewer", "test-writer", "security-reviewer", "docs-writer", "debugger"] as const;
+export const AGENT_IDS = [
+  "ui-designer",
+  "code-reviewer",
+  "test-writer",
+  "security-reviewer",
+  "docs-writer",
+  "debugger",
+  "api-designer",
+  "database-reviewer",
+  "accessibility-reviewer",
+  "performance-reviewer",
+  "data-scientist",
+] as const;
 export type AgentId = (typeof AGENT_IDS)[number];
 
 export const RISKY_IDS = ["git-push", "delete-files", "install-packages", "any-web-fetch"] as const;

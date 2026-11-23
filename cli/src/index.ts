@@ -3,7 +3,9 @@ import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { CAUTION_LEVELS, DEFAULT_ANSWERS, TOOL_IDS, TOOL_LABELS, answersSchema, decodePreset, type Answers, type Caution } from "../../src/lib/setup/answers";
+import { AGENT_LIBRARY } from "../../src/lib/setup/agents";
 import { generateSetup } from "../../src/lib/setup/generate";
+import { defaultAgents, recommendAgents } from "../../src/lib/setup/recommend";
 import { fileContent } from "../../src/lib/setup/lines";
 import { summariseDiff, writeFiles, type AskOverwrite, type FileSystem } from "./writer";
 
@@ -38,13 +40,20 @@ async function askAnswers(prompt: Prompt, cwd: string): Promise<Answers> {
   const cautions = Object.keys(CAUTION_LEVELS) as Caution[];
   stdout.write(cautions.map((c, i) => `  ${i + 1}. ${CAUTION_LEVELS[c]}`).join("\n") + "\n");
   const caution = cautions[Number(await prompt("How cautious should the AI be? (2): ")) - 1] ?? "balanced";
-  return answersSchema.parse({
+  const base = answersSchema.parse({
     ...DEFAULT_ANSWERS,
     projectName: name.replace(/[^\w .-]/g, "-").slice(0, 60),
     description: description.length >= 10 ? description : `${name}: a software project.`,
     tools: tools.length ? tools : ["claude-code"],
     caution,
   });
+  const suggested = recommendAgents(base).filter((r) => r.level === "recommended").slice(0, 6);
+  if (base.tools.includes("claude-code") && suggested.length) {
+    stdout.write(`\nSuggested helper agents for ${base.projectName}:\n${suggested.map((r) => `  - ${AGENT_LIBRARY[r.id].title}: ${r.reasons[0]}`).join("\n")}\n`);
+    const keep = (await prompt("Add these? (Y/n) ")).trim().toLowerCase();
+    if (keep === "n" || keep === "no") return { ...base, agents: [] };
+  }
+  return { ...base, agents: defaultAgents(base) };
 }
 
 function makeAsk(prompt: Prompt | null): AskOverwrite {

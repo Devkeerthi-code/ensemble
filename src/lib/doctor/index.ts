@@ -1,5 +1,7 @@
 import { FORBIDDEN_ALLOW_RULES, RISKY_PERMISSIONS } from "../setup/permissions";
+import { AGENT_LIBRARY } from "../setup/agents";
 import { formatOf, parseFrontmatter, validateFormat } from "../setup/formats";
+import { recommendFromText } from "../setup/recommend";
 
 export type InputFile = { path: string; content: string };
 export type Severity = "error" | "warning" | "info";
@@ -180,7 +182,18 @@ function checkSet(files: InputFile[]): Finding[] {
       out.push(finding({ severity: "info", path: "CLAUDE.md", title: "Rules are kept in two places", detail: "You have both CLAUDE.md and AGENTS.md. Adding a line @AGENTS.md to CLAUDE.md imports it, so you maintain your rules once." }));
     }
   }
+  out.push(...suggestAgents(files));
   return out;
+}
+
+/** No subagents yet: suggest the ones that fit what the instruction files describe. */
+function suggestAgents(files: InputFile[]): Finding[] {
+  const instructions = files.find((f) => f.path === "CLAUDE.md") ?? files.find((f) => f.path === "AGENTS.md");
+  if (!instructions || files.some((f) => formatOf(f.path) === "subagent")) return [];
+  const picks = recommendFromText(instructions.content).filter((r) => r.level === "recommended").slice(0, 4);
+  if (picks.length === 0) return [];
+  const list = picks.map((r) => `${AGENT_LIBRARY[r.id].title} (${r.reasons[0]})`).join("; ");
+  return [finding({ severity: "info", path: instructions.path, title: "No helper agents yet", detail: `Based on your instructions, these subagents would help: ${list} Get them from the Subagents tab and save them in .claude/agents/.` })];
 }
 
 export function runDoctor(input: InputFile[]): DoctorReport {
