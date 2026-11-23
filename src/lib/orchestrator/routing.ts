@@ -35,14 +35,19 @@ export type RouteInput = {
   exclude?: string[];
   scores?: MeasuredScore[];
   models?: ModelInfo[];
+  /** The task can call tools: skip models with unreliable tool use when a reliable one is available. */
+  tools?: boolean;
 };
 
 /**
  * Picks the best model for a skill. Quality blends the capability table with Ensemble's judge
  * scores; speed and cheapness are normalised 0..1 against the other candidates.
  */
-export function route({ skill, preference, available, exclude = [], scores = [], models = MODELS }: RouteInput): RouteDecision | null {
-  const pool = models.filter((m) => available.includes(m.provider) && !exclude.includes(modelId(m)));
+export function route({ skill, preference, available, exclude = [], scores = [], models = MODELS, tools = false }: RouteInput): RouteDecision | null {
+  const open = models.filter((m) => available.includes(m.provider) && !exclude.includes(modelId(m)));
+  const reliable = tools ? open.filter((m) => !m.weakTools) : open;
+  const pool = reliable.length ? reliable : open;
+  const skippedWeak = tools && reliable.length > 0 && reliable.length < open.length;
   if (pool.length === 0) return null;
 
   const measured = (m: ModelInfo) => scores.find((x) => x.provider === m.provider && x.model === m.model && x.skill === skill);
@@ -72,7 +77,8 @@ export function route({ skill, preference, available, exclude = [], scores = [],
     `${best.m.label} scored highest for ${skill} with a ${preference} preference: quality ${best.quality.toFixed(2)}, ` +
     `speed ${best.speed.toFixed(2)}, cheapness ${best.cheapness.toFixed(2)}, based on ${basis}.` +
     (runnerUp ? ` Next best: ${runnerUp.m.label} (${runnerUp.total.toFixed(2)} vs ${best.total.toFixed(2)}).` : "") +
-    (exclude.length ? ` Skipped after earlier attempts: ${exclude.join(", ")}.` : "");
+    (exclude.length ? ` Skipped after earlier attempts: ${exclude.join(", ")}.` : "") +
+    (skippedWeak ? " Models with unreliable tool use were skipped because this task can use tools." : "");
 
   return { model: best.m, reason, alternatives: ranked.slice(1).map((x) => ({ model: x.m, total: x.total })), ranked: ranked.map(({ id, total, quality, speed, cheapness }) => ({ id, total, quality, speed, cheapness })) };
 }

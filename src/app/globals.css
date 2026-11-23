@@ -370,3 +370,4 @@ pre.cmd.prose{font-family:var(--font);font-size:var(--t-sm);word-break:normal;ov
 fieldset.plain{border:0;padding:0;margin:0;min-width:0}
 fieldset.plain legend{padding:0;margin-bottom:var(--s2);font-size:var(--t-sm);font-weight:600;font-stretch:100%}
 .runbar .st{font-size:var(--t-md);font-weight:600;color:var(--ink)}
+.node .t{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}

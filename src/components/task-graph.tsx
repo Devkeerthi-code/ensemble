@@ -7,7 +7,7 @@ export type GraphTask = { key: string; title: string; skill: string; dependsOn: 
 type Props = { tasks: GraphTask[]; selected?: string | null; onSelect?: (key: string) => void; live?: boolean };
 
 const NODE_W = 156;
-const NODE_H = 52;
+const NODE_H = 64;
 const COL_GAP = 64;
 const ROW_GAP = 20;
 const PAD = 16;

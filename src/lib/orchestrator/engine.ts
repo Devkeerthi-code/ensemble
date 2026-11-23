@@ -165,7 +165,7 @@ export async function processTask(deps: EngineDeps, runId: string, key: string):
   const available = warm.length ? warm : allProviders;
   const lastModel = task.model && task.provider ? findModel(task.provider, task.model) : undefined;
   const retrySame = Boolean(lastModel && task.attempts > 0 && !task.triedModels.includes(modelId(lastModel)) && !cooling(lastModel.provider));
-  let decision: { model: ModelInfo; reason: string; alternatives?: Array<{ model: ModelInfo; total: number }>; ranked?: Array<{ total: number }> } | null = retrySame && lastModel ? { model: lastModel, reason: task.routeReason ?? "" } : route({ skill: task.skill, preference: run.preference, available, exclude: task.triedModels, scores: await deps.store.scores() });
+  let decision: { model: ModelInfo; reason: string; alternatives?: Array<{ model: ModelInfo; total: number }>; ranked?: Array<{ total: number }> } | null = retrySame && lastModel ? { model: lastModel, reason: task.routeReason ?? "" } : route({ skill: task.skill, preference: run.preference, available, exclude: task.triedModels, scores: await deps.store.scores(), tools: deps.config.useTools });
   if (!decision) return failTask(deps, run, key, available.length ? "Every available model has already been tried for this task." : "No AI provider is configured. Add a key in Settings.");
 
   const upstream = run.tasks.filter((t) => task.dependsOn.includes(t.key)).map((t) => ({ key: t.key, title: t.title, output: t.output ?? "" }));
@@ -210,7 +210,7 @@ export async function processTask(deps: EngineDeps, runId: string, key: string):
   let errorText = "";
   let retryAfter: number | undefined;
   try {
-    const second = copies === 2 ? route({ skill: task.skill, preference: run.preference, available, exclude: [...task.triedModels, modelId(decision.model)], scores: await deps.store.scores() }) : null;
+    const second = copies === 2 ? route({ skill: task.skill, preference: run.preference, available, exclude: [...task.triedModels, modelId(decision.model)], scores: await deps.store.scores(), tools: deps.config.useTools }) : null;
     const settled = await Promise.allSettled([attemptWith(deps, run, task, decision.model, creds, prompt), ...(second ? [attemptWith(deps, run, task, second.model, creds, prompt)] : [])]);
     attempts = settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
     const rejected = settled.find((s): s is PromiseRejectedResult => s.status === "rejected");

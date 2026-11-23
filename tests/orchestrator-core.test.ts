@@ -235,3 +235,15 @@ describe("provider rate-limit handling", async () => {
     expect(s).not.toMatch(/org_01m|gsk_abc/);
   });
 });
+
+describe("routing avoids models with unreliable tool use", () => {
+  it("skips weak-tool models for tool tasks when a reliable model exists, but still uses them if nothing else is left", () => {
+    const withTools = route({ skill: "writing", preference: "speed", available: ["groq", "gemini"], tools: true })!;
+    expect(withTools.model.weakTools).toBeFalsy();
+    expect(withTools.reason).toMatch(/unreliable tool use/);
+    const noTools = route({ skill: "writing", preference: "speed", available: ["groq", "gemini"], tools: false })!;
+    expect(noTools.model.provider).toBe("groq");
+    const onlyGroqWeak = route({ skill: "writing", preference: "speed", available: ["groq"], tools: true, exclude: ["groq:qwen/qwen3.8-27b"] })!;
+    expect(onlyGroqWeak.model.weakTools).toBe(true);
+  });
+});
