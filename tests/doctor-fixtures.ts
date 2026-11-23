@@ -3,6 +3,9 @@ import type { InputFile, Severity } from "@/lib/doctor";
 export type BadFixture = { name: string; files: InputFile[]; expectTitle: string; severity: Severity; fixable: boolean };
 
 const agent = (fm: string, body = "You review code. Report bugs with file and line.") => `---\n${fm}\n---\n\n${body}\n`;
+/** Built at runtime so no token-shaped literal sits in the repo (GitHub push protection would flag it). */
+const FAKE_GITHUB_TOKEN = ["ghp", "_", "x".repeat(36)].join("");
+
 const okAgent = agent("name: reviewer\ndescription: Reviews code\ntools: Read");
 
 export const BAD_FIXTURES: BadFixture[] = [
@@ -29,7 +32,7 @@ export const BAD_FIXTURES: BadFixture[] = [
   { name: "mcp server without command or url", files: [{ path: ".mcp.json", content: '{"mcpServers":{"x":{"args":["a"]}}}' }], expectTitle: "Invalid format", severity: "error", fixable: false },
   {
     name: "hard-coded GitHub token in .mcp.json",
-    files: [{ path: ".mcp.json", content: '{"mcpServers":{"github":{"type":"http","url":"https://api.githubcopilot.com/mcp/","headers":{"Authorization":"Bearer ghp_abcdefghijklmnopqrstuvwxyz0123456789"}}}}' }],
+    files: [{ path: ".mcp.json", content: JSON.stringify({ mcpServers: { github: { type: "http", url: "https://api.githubcopilot.com/mcp/", headers: { Authorization: `Bearer ${FAKE_GITHUB_TOKEN}` } } } }) }],
     expectTitle: "GitHub token",
     severity: "error",
     fixable: true,
