@@ -8,6 +8,7 @@ import { db } from "../src/lib/server/db";
 import { prismaStore } from "../src/lib/server/orchestrator/prisma-store";
 import { bossConnection, enqueueTasks, TASK_QUEUE, type TaskJob } from "../src/lib/server/orchestrator/queue";
 import { track } from "../src/lib/server/telemetry";
+import { queueDeliveryIfNeeded } from "../src/lib/server/automation/workflows";
 
 const CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? 8);
 const log = (msg: string, extra: Record<string, unknown> = {}) => console.log(JSON.stringify({ t: new Date().toISOString(), msg, ...extra }));
@@ -44,10 +45,14 @@ async function main() {
     const { runId, key } = job.data;
     // Never log prompts, outputs or keys: only ids and outcome.
     const started = Date.now();
+    const before = await db.run.findUnique({ where: { id: runId }, select: { status: true } });
     const result = await processTask(deps, runId, key);
     await enqueueTasks(boss, runId, result.enqueue);
     const run = await db.run.findUnique({ where: { id: runId }, select: { status: true } });
-    if (run?.status === "completed") await track("run_completed");
+    if (before?.status !== "completed" && run?.status === "completed") {
+      await track("run_completed");
+      await queueDeliveryIfNeeded(runId);
+    }
     log("task step", { runId, key, ms: Date.now() - started, next: result.enqueue.length });
   });
 

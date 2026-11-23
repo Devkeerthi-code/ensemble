@@ -13,12 +13,15 @@ describe.skipIf(!hasDb)("user isolation (database)", async () => {
   const runs = await import("@/lib/server/orchestrator/runs");
   const { runSnapshot } = await import("@/lib/server/orchestrator/snapshot");
   const keys = await import("@/lib/server/orchestrator/keys");
+  const wf = await import("@/lib/server/automation/workflows");
 
   const tag = randomBytes(4).toString("hex");
   let alice = "";
   let bob = "";
   let aliceRun = "";
   let aliceApproval = "";
+  let aliceWorkflow = "";
+  let aliceHookToken = "";
 
   beforeAll(async () => {
     alice = (await db.user.create({ data: { email: `iso-a-${tag}@example.test`, passwordHash: "x" } })).id;
@@ -30,6 +33,10 @@ describe.skipIf(!hasDb)("user isolation (database)", async () => {
     aliceApproval = (await db.approval.create({ data: { runId: run.id, taskId: task.id, userId: alice, kind: "spend", summary: "pricey" } })).id;
     await db.setupProfile.create({ data: { userId: alice, name: "alice-setup", answers: {}, templateVersion: "test" } });
     await keys.saveProviderKey(alice, "anthropic", "sk-ant-alice-only-key-123456");
+    const created = await wf.createFromRun(alice, aliceRun, "Alice weekly");
+    if (!created.ok) throw new Error(created.error);
+    aliceWorkflow = created.id;
+    aliceHookToken = (await wf.rotateWebhookToken(alice, aliceWorkflow))!;
   }, 60_000);
 
   afterAll(async () => {
@@ -69,5 +76,27 @@ describe.skipIf(!hasDb)("user isolation (database)", async () => {
   it("Bob's lists don't include Alice's setups or runs", async () => {
     expect(await db.setupProfile.count({ where: { userId: bob } })).toBe(0);
     expect(await db.run.count({ where: { userId: bob } })).toBe(0);
+  });
+
+  it("Bob can't see, change, delete or trigger Alice's workflow", async () => {
+    expect(await wf.ownedWorkflow(bob, aliceWorkflow)).toBeNull();
+    const upd = await wf.updateSettings(bob, aliceWorkflow, { name: "hijacked", budgetUsd: 5, priority: "high", preference: "quality" });
+    expect(upd.ok).toBe(false);
+    expect(await wf.setEnabled(bob, aliceWorkflow, false)).toBe(false);
+    expect(await wf.rotateWebhookToken(bob, aliceWorkflow)).toBeNull();
+    expect(await wf.deleteWorkflow(bob, aliceWorkflow)).toBe(false);
+    expect(await wf.createFromRun(bob, aliceRun, "steal")).toMatchObject({ ok: false });
+    expect((await db.workflow.findUnique({ where: { id: aliceWorkflow } }))?.name).toBe("Alice weekly");
+  });
+
+  it("a webhook token only works for its own workflow", async () => {
+    expect((await wf.workflowByWebhookToken(aliceWorkflow, aliceHookToken))?.id).toBe(aliceWorkflow);
+    const bobRun = await db.run.create({ data: { userId: bob, goalId: (await db.goal.create({ data: { userId: bob, title: "Bob goal title", criteria: "x", budgetUsd: 1 } })).id, budgetUsd: 1 } });
+    await db.task.create({ data: { runId: bobRun.id, key: "b", title: "Bob task", skill: "writing", instructions: "Write something", acceptance: "ok", dependsOn: [] } });
+    const bobWf = await wf.createFromRun(bob, bobRun.id, "Bob flow");
+    if (!bobWf.ok) throw new Error("setup");
+    const bobToken = (await wf.rotateWebhookToken(bob, bobWf.id))!;
+    expect(await wf.workflowByWebhookToken(aliceWorkflow, bobToken)).toBeNull();
+    expect(await wf.workflowByWebhookToken(aliceWorkflow, "whk_guessedguessedguessedguessed")).toBeNull();
   });
 });

@@ -3,6 +3,7 @@ import { planSchema, validateDag, type Plan } from "@/lib/orchestrator/dag";
 import { reconcileRun, resolveApproval, startRun, DEFAULT_CONFIG, type EngineDeps } from "@/lib/orchestrator/engine";
 import { aiSdkClient } from "@/lib/orchestrator/ai-sdk-client";
 import { ConcurrencyLimiter } from "@/lib/orchestrator/scheduler";
+import { sendDelivery } from "@/lib/automation/delivery";
 import { db } from "../db";
 import { audit, track } from "../telemetry";
 import { planGoal } from "./planner";
@@ -107,7 +108,10 @@ export async function cloneRun(userId: string, runId: string): Promise<string | 
 export async function decideApproval(userId: string, approvalId: string, approve: boolean): Promise<{ ok: boolean; error?: string }> {
   const approval = await db.approval.findFirst({ where: { id: approvalId, userId, status: "pending" } });
   if (!approval) return { ok: false, error: "This approval was already decided." };
-  await db.approval.update({ where: { id: approvalId }, data: { status: approve ? "approved" : "rejected", decidedAt: new Date() } });
+  // Conditional update = atomic claim: a double click or two tabs can't both act on one approval.
+  const claimed = await db.approval.updateMany({ where: { id: approvalId, status: "pending" }, data: { status: approve ? "approved" : "rejected", decidedAt: new Date() } });
+  if (claimed.count === 0) return { ok: false, error: "This approval was already decided." };
+  if (approval.kind === "deliver") return deliverApproved(userId, approval, approve);
   const task = approval.taskId ? await db.task.findUnique({ where: { id: approval.taskId }, select: { key: true } }) : null;
   if (task) {
     const { enqueue } = await resolveApproval(webDeps(), approval.runId, task.key, approve);
@@ -115,4 +119,25 @@ export async function decideApproval(userId: string, approvalId: string, approve
   }
   await audit(approve ? "approval_granted" : "approval_rejected", { userId, target: approvalId });
   return { ok: true };
+}
+
+type ApprovalRow = { id: string; runId: string; details: unknown };
+
+/** The only code path that sends anything outside Ensemble, and it runs after a human approved it. */
+async function deliverApproved(userId: string, approval: ApprovalRow, approve: boolean): Promise<{ ok: boolean; error?: string }> {
+  if (!approve) {
+    await audit("delivery_rejected", { userId, target: approval.id });
+    return { ok: true };
+  }
+  const run = await db.run.findFirst({ where: { id: approval.runId, userId }, include: { goal: { select: { title: true } } } });
+  const details = approval.details as { url?: string } | null;
+  if (!run?.finalOutput || !details?.url) return { ok: false, error: "Nothing to deliver." };
+  try {
+    const res = await sendDelivery(details.url, run.goal.title, run.finalOutput);
+    await audit("delivery_sent", { userId, target: approval.id, meta: { status: res.status } });
+    return res.ok ? { ok: true } : { ok: false, error: `The webhook answered HTTP ${res.status}.` };
+  } catch (e) {
+    await audit("delivery_failed", { userId, target: approval.id });
+    return { ok: false, error: (e as Error).message };
+  }
 }
