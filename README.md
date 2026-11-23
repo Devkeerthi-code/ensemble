@@ -54,6 +54,7 @@ Set up AI coding tools safely, with every generated line explained, then run tea
   - The router blends a capability table with Ensemble's own judge scores, latency and cost, which update after every run.
   - Every task shows why its model was chosen.
   - If the best provider is busy, the task spills over to the next-best model on a free provider.
+  - Tasks that can use tools skip models that live testing showed to be unreliable with tools (Groq gpt-oss called tools it wasn't given). The reason is shown in "why this model".
 - **Agents that work together:** a shared run workspace (blackboard), typed messages (ask, answer, hand-off), and an `ask_agent` tool so agents can call other agents. Tools are served over MCP: read-only web fetch, workspace and calculator.
 - **Judge:** scores each result against its acceptance criteria. Failing results are retried on a different model. "Important" tasks run on two models and the better one is kept. A deterministic "who did what" report is attached to the final output.
 - **Live run view:** the task graph updates over server-sent events. You see status, model, tokens, cost and time per task, messages between agents, pending approvals, and pause, resume, cancel and re-run controls.
@@ -240,6 +241,7 @@ CLI: `npm run cli:build`, then `node cli/dist/index.js init --preset <code>`. To
 
 - Mocked tests proved the scheduler right, but only real free-tier providers showed the real bottleneck (tokens per minute). Testing against reality early changes the design.
 - Putting every decision in small pure functions (`route`, `decideNext`, `checkBudget`) made a complicated engine testable in milliseconds.
+- Live end-to-end runs found three bugs no mock could: empty answers after tool loops, reasoning models cut off by a small output limit, and a model that invents tool calls. Each became a fix plus a regression test.
 - Prompt-injection defence is mostly plumbing: label every piece of outside text as data, and make sure no tool can do anything dangerous even if an agent is fooled.
 - AI tool config formats change fast, so reading the current docs mattered. For example, custom commands have moved to skills, and the Google provider factory is now `createGoogle`.
 
