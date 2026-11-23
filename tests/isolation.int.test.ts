@@ -80,7 +80,7 @@ describe.skipIf(!hasDb)("user isolation (database)", async () => {
 
   it("Bob can't see, change, delete or trigger Alice's workflow", async () => {
     expect(await wf.ownedWorkflow(bob, aliceWorkflow)).toBeNull();
-    const upd = await wf.updateSettings(bob, aliceWorkflow, { name: "hijacked", budgetUsd: 5, priority: "high", preference: "quality" });
+    const upd = await wf.updateSettings(bob, aliceWorkflow, { name: "hijacked", budgetUsd: 5, priority: "high", preference: "quality", schedule: undefined, deliveryUrl: undefined });
     expect(upd.ok).toBe(false);
     expect(await wf.setEnabled(bob, aliceWorkflow, false)).toBe(false);
     expect(await wf.rotateWebhookToken(bob, aliceWorkflow)).toBeNull();
