@@ -8,6 +8,7 @@ import { createOllama } from "ollama-ai-provider-v2";
 import type { Provider } from "./catalog";
 import type { AgentTool, LlmCall, LlmClient, LlmResult } from "./llm";
 
+const MAX_STEPS = 5;
 const ollamaBase = () => process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/api";
 
 /** One factory per provider, all behind the Vercel AI SDK's LanguageModel interface. */
@@ -37,18 +38,22 @@ function toToolSet(tools: AgentTool[] = []): ToolSet {
 export const aiSdkClient: LlmClient = {
   async generate(call: LlmCall): Promise<LlmResult> {
     const started = Date.now();
+    const withTools = Boolean(call.tools?.length);
     const result = await generateText({
       model: languageModel(call.model.provider, call.model.model, call.apiKey),
       system: call.system,
       prompt: call.prompt,
       maxOutputTokens: call.maxOutputTokens,
-      tools: call.tools?.length ? toToolSet(call.tools) : undefined,
-      stopWhen: isStepCount(call.tools?.length ? 6 : 1),
+      tools: withTools ? toToolSet(call.tools) : undefined,
+      stopWhen: isStepCount(withTools ? MAX_STEPS : 1),
+      // Take the tools away for the last step so the agent must write its answer instead of calling yet another tool.
+      prepareStep: withTools ? ({ stepNumber }) => (stepNumber >= MAX_STEPS - 1 ? { activeTools: [] } : undefined) : undefined,
       maxRetries: 0,
       abortSignal: call.signal ?? AbortSignal.timeout(120_000),
     });
+    const text = result.text.trim() || result.steps.map((s) => s.text).filter(Boolean).join("\n\n");
     return {
-      text: result.text,
+      text,
       inputTokens: result.usage.inputTokens ?? 0,
       outputTokens: result.usage.outputTokens ?? 0,
       latencyMs: Date.now() - started,
