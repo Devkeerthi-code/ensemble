@@ -6,8 +6,19 @@ type Signal = { id: AgentId; weight: number; reason: string };
 
 const has = (text: string, words: RegExp) => words.test(text);
 
+/** Turns the matched word into a readable phrase ("pay" → "payments"). */
+function sensitivePhrase(word: string): string {
+  const w = word.toLowerCase();
+  if (/pay|upi|stripe|razorpay|wallet|bank/.test(w)) return "payments";
+  if (/log ?in|sign ?up|auth|password/.test(w)) return "logins";
+  if (/medical|health/.test(w)) return "health data";
+  if (/upload/.test(w)) return "file uploads";
+  if (/admin/.test(w)) return "admin access";
+  return "personal data";
+}
+
 const KEYWORDS: Array<{ id: AgentId; words: RegExp; reason: (hit: string) => string; weight: number }> = [
-  { id: "security-reviewer", words: /\b(log ?in|sign ?up|auth|password|payment|pay|upi|stripe|razorpay|wallet|bank|medical|health|admin|personal data|aadhaar|upload)/i, reason: (w) => `It handles ${w.toLowerCase()}, so mistakes can leak data or money.`, weight: 3 },
+  { id: "security-reviewer", words: /\b(log ?in|sign ?up|auth|password|payment|pay|upi|stripe|razorpay|wallet|bank|medical|health|admin|personal data|aadhaar|upload)/i, reason: (w) => `It handles ${sensitivePhrase(w)}, so mistakes can leak data or money.`, weight: 3 },
   { id: "database-reviewer", words: /\b(database|postgres|mysql|sqlite|mongo|prisma|drizzle|supabase|firebase|sql|schema|records?|inventory|attendance|orders?|bookings?)/i, reason: (w) => `It stores ${w.toLowerCase()}, so schema changes and migrations need a second look.`, weight: 2 },
   { id: "api-designer", words: /\b(api|endpoint|rest|graphql|webhook|integration|backend|server)/i, reason: () => "It exposes or calls an API, where a clear contract saves rework.", weight: 2 },
   { id: "accessibility-reviewer", words: /\b(students?|college|school|public|customers?|citizens?|elderly|government|clinic|shop|everyone|users?)/i, reason: (w) => `Real people (${w.toLowerCase()}) will use it, many on phones or with assistive tech.`, weight: 2 },

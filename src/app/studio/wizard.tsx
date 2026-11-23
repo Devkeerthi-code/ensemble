@@ -11,10 +11,12 @@ import {
   TOOL_IDS,
   TOOL_LABELS,
   answersSchema,
+  type AgentId,
   type Answers,
   type Caution,
 } from "@/lib/setup/answers";
 import { AGENT_LIBRARY } from "@/lib/setup/agents";
+import { defaultAgents, recommendAgents, type Recommendation } from "@/lib/setup/recommend";
 import { generateSetup } from "@/lib/setup/generate";
 import { FileViewer } from "@/components/file-viewer";
 
@@ -24,6 +26,20 @@ const MCP_LABELS: Record<(typeof MCP_IDS)[number], string> = {
   context7: "Context7 (up-to-date library docs)",
   github: "GitHub (issues and PRs)",
   playwright: "Playwright (check pages in a browser)",
+};
+
+const HELPERS_STEP = STEPS.indexOf("Helpers");
+
+/** Plain-language topics behind each project-specific suggestion, for the "Based on..." line. */
+const AGENT_TOPICS: Partial<Record<AgentId, string>> = {
+  "security-reviewer": "sensitive data like logins or payments",
+  "database-reviewer": "a database",
+  "api-designer": "an API",
+  "ui-designer": "screens people will use",
+  "accessibility-reviewer": "real users, many on phones",
+  "performance-reviewer": "speed",
+  "data-scientist": "data or models",
+  "docs-writer": "people who need clear docs",
 };
 
 type Props = { initial: Answers; signedIn: boolean; setupId?: string };
@@ -41,11 +57,96 @@ const STEP_FIELDS: Array<Array<keyof Answers>> = [
   ["agents", "mcpServers"],
 ];
 
+function joinPlain(items: string[]): string {
+  if (items.length <= 1) return items.join("");
+  return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+}
+
+function basedOnLine(recs: Recommendation[]): string {
+  const topics = recs.map((r) => AGENT_TOPICS[r.id]).filter((t): t is string => Boolean(t)).slice(0, 3);
+  if (topics.length === 0) return "Based on what you told us, these cover what every project needs: fixing bugs, testing and review.";
+  return `Based on what you told us: ${joinPlain(topics)}.`;
+}
+
+function sameSet(a: AgentId[], b: AgentId[]): boolean {
+  return a.length === b.length && a.every((id) => b.includes(id));
+}
+
+type HelperProps = { answers: Answers; onChange: (agents: AgentId[]) => void };
+
+function HelperAgents({ answers, onChange }: HelperProps) {
+  const recs = useMemo(() => recommendAgents(answers), [answers]);
+  const defaults = useMemo(() => defaultAgents(answers), [answers]);
+  const others = AGENT_IDS.filter((id) => !recs.some((r) => r.id === id));
+  const selected = answers.agents;
+  const usingDefaults = sameSet(selected, defaults);
+  const flip = (id: AgentId) => onChange(toggle(selected, id));
+
+  return (
+    <>
+      <fieldset>
+        <legend>Suggested for {answers.projectName.trim() || "your project"}</legend>
+        <p className="hint">{basedOnLine(recs)} Each helper is a specialist Claude Code can hand work to. You can edit them later in the Subagents tab.</p>
+        <div className="sugg-bar">
+          <span className="xs muted" aria-live="polite">{selected.length} of {AGENT_IDS.length} selected</span>
+          <button type="button" className="btn sm" onClick={() => onChange(defaults)} disabled={usingDefaults}>
+            {usingDefaults ? "Using suggestions" : "Use suggestions"}
+          </button>
+        </div>
+        <ul className="sugg-list">
+          {recs.map((r) => <SuggestionRow key={r.id} rec={r} checked={selected.includes(r.id)} onToggle={() => flip(r.id)} />)}
+        </ul>
+      </fieldset>
+      {others.length > 0 && (
+        <fieldset>
+          <legend>Other agents in the library</legend>
+          <p className="hint">Nothing in your answers points to these, but you can add any of them.</p>
+          <div className="chips">
+            {others.map((id) => (
+              <label className="chip" key={id} title={AGENT_LIBRARY[id].summary}><input type="checkbox" checked={selected.includes(id)} onChange={() => flip(id)} /><span>{AGENT_LIBRARY[id].title}</span></label>
+            ))}
+          </div>
+        </fieldset>
+      )}
+    </>
+  );
+}
+
+function SuggestionRow({ rec, checked, onToggle }: { rec: Recommendation; checked: boolean; onToggle: () => void }) {
+  const agent = AGENT_LIBRARY[rec.id];
+  const [first, ...more] = rec.reasons;
+  const whyId = `why-${rec.id}`;
+  return (
+    <li>
+      <label className="sugg">
+        <input type="checkbox" checked={checked} onChange={onToggle} aria-describedby={whyId} />
+        <span className="sugg-nh" aria-hidden="true" />
+        <span className="sugg-body">
+          <span className="sugg-title">
+            <span>{agent.title}</span>
+            <span className={`sugg-lvl ${rec.level}`}>{rec.level}</span>
+          </span>
+          <span className="sugg-why" id={whyId}>{first}</span>
+          <span className="xs muted">{agent.summary}</span>
+        </span>
+      </label>
+      {more.length > 0 && (
+        <details className="sugg-more">
+          <summary className="xs">{more.length === 1 ? "1 more reason" : `${more.length} more reasons`}</summary>
+          <ul>{more.map((m) => <li key={m} className="xs">{m}</li>)}</ul>
+        </details>
+      )}
+    </li>
+  );
+}
+
 export function StudioWizard({ initial, signedIn, setupId }: Props) {
   const [answers, setAnswers] = useState<Answers>(initial);
   const [step, setStep] = useState(setupId ? STEPS.length - 1 : 0);
   const [errors, setErrors] = useState<Partial<Record<keyof Answers, string>>>({});
   const [frameworkText, setFrameworkText] = useState(initial.frameworks.join(", "));
+  // A saved setup already has a deliberate agent list, so treat it as hand-picked.
+  const [agentsTouched, setAgentsTouched] = useState(Boolean(setupId));
   const set = <K extends keyof Answers>(key: K, value: Answers[K]) => setAnswers((a) => ({ ...a, [key]: value }));
 
   const preview = useMemo(() => {
@@ -64,7 +165,9 @@ export function StudioWizard({ initial, signedIn, setupId }: Props) {
       }
     }
     setErrors(stepErrors);
-    if (Object.keys(stepErrors).length === 0) setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    if (Object.keys(stepErrors).length > 0) return;
+    if (step === HELPERS_STEP - 1 && !agentsTouched) setAnswers((a) => ({ ...a, agents: defaultAgents(a) }));
+    setStep((s) => Math.min(s + 1, STEPS.length - 1));
   }
 
   const err = (k: keyof Answers) => errors[k] && <span className="err" role="alert">{errors[k]}</span>;
@@ -168,17 +271,9 @@ export function StudioWizard({ initial, signedIn, setupId }: Props) {
           </>
         )}
 
-        {step === 4 && (
+        {step === HELPERS_STEP && (
           <>
-            <fieldset>
-              <legend>Helper agents (Claude Code subagents)</legend>
-              <p className="hint">Each one is a specialist Claude can hand work to. You can preview and edit them in the Subagents tab.</p>
-              <div className="chips">
-                {AGENT_IDS.map((id) => (
-                  <label className="chip" key={id} title={AGENT_LIBRARY[id].summary}><input type="checkbox" checked={answers.agents.includes(id)} onChange={() => set("agents", toggle(answers.agents, id))} /><span>{AGENT_LIBRARY[id].title}</span></label>
-                ))}
-              </div>
-            </fieldset>
+            <HelperAgents answers={answers} onChange={(agents) => { setAgentsTouched(true); set("agents", agents); }} />
             <fieldset>
               <legend>MCP servers (optional)</legend>
               <p className="hint">Extra tools the AI can use. Leave empty if you are not sure. You can add them later.</p>

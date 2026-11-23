@@ -4,7 +4,11 @@ Set up AI coding tools safely, with every generated line explained, then run tea
 
 **Live demo:** TODO: add the Vercel link after deploying.
 
-<!-- TODO: screenshots. With the app running, capture /, /studio (files step), /doctor and a finished run into docs/screenshots/. -->
+| Home | Suggested helpers for your project (desktop) | Phone (360px) |
+|---|---|---|
+| ![Home](docs/screenshots/home.png) | ![Suggested subagents](docs/screenshots/studio-suggestions-1280.png) | ![Suggestions on a phone](docs/screenshots/studio-suggestions-360.png) |
+
+<!-- TODO: add screenshots of Doctor and a finished Orchestrator run (needs a network that allows Postgres port 5432). -->
 
 ## Who is this for and what problem does it solve?
 
@@ -22,7 +26,8 @@ Set up AI coding tools safely, with every generated line explained, then run tea
 - One shared rule set lives in `AGENTS.md`. `CLAUDE.md` imports it with `@AGENTS.md` and `GEMINI.md` with `@./AGENTS.md`, so rules are maintained once.
 - Every line is explained side by side with the file. A placement guide covers project, local and user-level files.
 - Safe permissions by default. "Allow everything" is never generated. `.env` reads and `rm -rf` are always denied. Four risky permissions are off until you switch them on, each with a warning.
-- Subagent library with six agents: UI designer, code reviewer, test writer, security reviewer, docs writer and debugger. Each is previewable line by line and editable with live format validation.
+- Subagent library with 11 agents: UI designer, code reviewer, test writer, security reviewer, docs writer, debugger, API designer, database reviewer, accessibility reviewer, performance reviewer and data scientist. Each is previewable line by line and editable with live format validation.
+- **Suggested helpers for your idea:** Ensemble reads your description, project type, stack, team size and caution level and suggests the subagents that fit, each with its reason. For example, "It handles payments, so mistakes can leak data or money" suggests the security reviewer. The recommended ones are pre-selected; you can change them. The CLI asks the same way, and Doctor suggests helpers when an existing setup has none.
 - Three ways out: download a zip, copy each file, or run `npx ensemble-setup init --preset <code>`. The CLI never overwrites an existing file without asking.
 - **Doctor:** upload a project folder (only AI config files are read) or paste files. Doctor checks each against the official format and finds:
   - files in the wrong folder;
@@ -121,7 +126,11 @@ The engine (`src/lib/orchestrator/engine.ts`) talks to persistence only through 
    - Quality is a prior from the capability table, blended with judge scores as samples come in (prior weight 5), then weighted by your preference.
    - The reason string is generated from the same numbers, so "why this model" is never made up.
    - *Alternative:* hand-picked model per skill, which is simple but never learns and can't fail over.
-6. **SSE polls an append-only event table.**
+6. **Subagent suggestions are rules, not an LLM call.**
+   - Weighted signals from the answers (project type, frameworks, keywords like "payment", "Postgres" or "students") pick the agents, and each signal carries its reason.
+   - It's instant, free, works offline in the browser and the CLI, and the reasons can't be invented.
+   - *Alternative:* ask a model to pick agents. It's smarter on unusual projects but costs a call, needs a key and is harder to test.
+7. **SSE polls an append-only event table.**
    - The worker is a separate process, so there is no in-memory pub/sub to subscribe to.
    - Clients resume with `Last-Event-ID`.
    - *Alternative:* Postgres LISTEN/NOTIFY, but it doesn't survive Neon's pooler.
