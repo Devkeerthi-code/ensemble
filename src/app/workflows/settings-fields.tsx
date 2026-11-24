@@ -63,7 +63,7 @@ function ScheduleField({ initial }: { initial: string | null }) {
           <label htmlFor="cron">Cron expression (minute hour day month weekday)</label>
           <input id="cron" className="input mono" value={custom} onChange={(e) => setCustom(e.target.value)} maxLength={60} spellCheck={false} autoComplete="off" aria-describedby="cron-hint cron-preview" aria-invalid={!preview.ok} />
           <span id="cron-hint" className="hint">e.g. <code>0 9 * * MON</code> is every Monday at 09:00 UTC. Shortcuts like <code>@daily</code> work too.</span>
-          <span id="cron-preview" className={preview.ok ? "hint" : "err"} role="status">{preview.text}</span>
+          <span id="cron-preview" className={preview.ok ? "hint" : "err"} role="status" suppressHydrationWarning>{preview.text}</span>
         </div>
       )}
       <input type="hidden" name="schedule" value={value} />
