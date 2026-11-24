@@ -5,7 +5,7 @@ name: Demo on GitHub Pages
 on:
   push:
     branches: [main]
-    paths: ["docs/design-concept/**", ".github/workflows/pages.yml"]
+    paths: ["docs/design-concept/**", "docs/screenshots/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -26,6 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - run: cp -r docs/screenshots docs/design-concept/screenshots
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/design-concept

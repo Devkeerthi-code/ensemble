@@ -301,6 +301,7 @@ footer{padding:var(--s7) 0;color:var(--ink-3);font-size:var(--t-sm)}
       <a href="#doctor"><span class="mark">D</span>Doctor</a>
       <a href="#orchestrator"><span class="mark">E</span>Orchestrator</a>
       <a href="#states"><span class="mark">F</span>States</a>
+      <a href="#app"><span class="mark">G</span>Real app</a>
     </nav>
     <button class="btn ghost sm" id="themeBtn" type="button" aria-label="Switch colour theme">Theme</button>
   </div>
@@ -531,6 +532,22 @@ Review the diff and list problems.</textarea></div>
     </div>
   </div>
 </section>
+
+<!-- G: REAL APP -->
+<section id="app" class="screen" aria-labelledby="h-app">
+  <div class="wrap">
+    <div class="sh"><div><div class="eyebrow"><span class="mark">G</span>Real app</div><h2 id="h-app">Screenshots of the running app</h2><p>Everything above is a clickable demo with demo data. These are captures of the real Next.js app, including Workflows, which the demo above does not cover.</p></div></div>
+    <div style="display:grid;gap:var(--s4);grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))">
+      <figure class="panel" style="margin:0"><img src="screenshots/workflows.png" alt="Workflows: saved goals that run on a cron schedule or a webhook" loading="lazy" style="width:100%;height:auto;display:block"><figcaption class="small muted panel-b">Workflows: saved goals that run on a cron schedule or a webhook</figcaption></figure>
+      <figure class="panel" style="margin:0"><img src="screenshots/workflow-new.png" alt="Creating a workflow from a template" loading="lazy" style="width:100%;height:auto;display:block"><figcaption class="small muted panel-b">Creating a workflow from a template</figcaption></figure>
+      <figure class="panel" style="margin:0"><img src="screenshots/approvals.png" alt="Approvals inbox: outside-world actions wait for a yes" loading="lazy" style="width:100%;height:auto;display:block"><figcaption class="small muted panel-b">Approvals inbox: outside-world actions wait for a yes</figcaption></figure>
+      <figure class="panel" style="margin:0"><img src="screenshots/live-run.png" alt="A live run streaming task by task" loading="lazy" style="width:100%;height:auto;display:block"><figcaption class="small muted panel-b">A live run streaming task by task</figcaption></figure>
+      <figure class="panel" style="margin:0"><img src="screenshots/plan-editor.png" alt="Editing the plan before a run starts" loading="lazy" style="width:100%;height:auto;display:block"><figcaption class="small muted panel-b">Editing the plan before a run starts</figcaption></figure>
+      <figure class="panel" style="margin:0"><img src="screenshots/studio-suggestions-360.png" alt="Setup Studio on a 360px phone" loading="lazy" style="width:100%;height:auto;display:block"><figcaption class="small muted panel-b">Setup Studio on a 360px phone</figcaption></figure>
+    </div>
+  </div>
+</section>
+
 </main>
 <footer><div class="wrap">Ensemble design concept · static preview · all example data is demo data.</div></footer>
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
