@@ -4,7 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { depths, findCycle } from "@/lib/orchestrator/dag";
 
 export type GraphTask = { key: string; title: string; skill: string; dependsOn: string[]; status?: string };
-type Props = { tasks: GraphTask[]; selected?: string | null; onSelect?: (key: string) => void; live?: boolean };
+type Props = {
+  tasks: GraphTask[];
+  selected?: string | null;
+  onSelect?: (key: string) => void;
+  /** Alt+Arrow Up/Down on a node; given only where the plan is editable. */
+  onMove?: (key: string, dir: -1 | 1) => void;
+  live?: boolean;
+};
 
 const NODE_W = 156;
 const NODE_H = 64;
@@ -83,7 +90,7 @@ function useSpring() {
   };
 }
 
-export function TaskGraph({ tasks, selected, onSelect, live }: Props) {
+export function TaskGraph({ tasks, selected, onSelect, onMove, live }: Props) {
   const { pos, width, height } = useMemo(() => layout(tasks), [tasks]);
   const spring = useSpring();
   const drag = useRef<{ key: string; sx: number; sy: number; moved: boolean } | null>(null);
@@ -121,6 +128,13 @@ export function TaskGraph({ tasks, selected, onSelect, live }: Props) {
               aria-label={`${t.title}, ${t.skill}${t.status ? `, ${STATUS_LABEL[t.status] ?? t.status}` : ""}`}
               aria-pressed={selected === t.key}
               onClick={() => { if (!drag.current?.moved) onSelect?.(t.key); }}
+              onKeyDown={(e) => {
+                if (!onMove || !e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+                e.preventDefault();
+                onSelect?.(t.key);
+                onMove(t.key, e.key === "ArrowUp" ? -1 : 1);
+              }}
+              aria-keyshortcuts={onMove ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
               onPointerDown={(e) => { (e.target as HTMLElement).setPointerCapture(e.pointerId); drag.current = { key: t.key, sx: e.clientX, sy: e.clientY, moved: false }; }}
               onPointerMove={(e) => {
                 const d = drag.current;

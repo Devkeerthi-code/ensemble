@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { SKILLS, validateDag, type PlanTask } from "@/lib/orchestrator/dag";
+import { moveInColumn, SKILLS, validateDag, type PlanTask } from "@/lib/orchestrator/dag";
 import { GraphLegend, TaskGraph } from "@/components/task-graph";
 import { useToast } from "@/components/toast";
 import { launchRunAction, savePlanAction } from "../../actions";
@@ -29,6 +29,7 @@ export function PlanEditor({ runId, initial, planError, budgetUsd }: Props) {
     setTasks((all) => all.filter((t) => t.key !== key).map((t) => ({ ...t, dependsOn: t.dependsOn.filter((d) => d !== key) })));
     setSelected(null);
   };
+  const move = (key: string, dir: -1 | 1) => setTasks((all) => moveInColumn(all, key, dir));
   const add = () => {
     let n = tasks.length + 1;
     while (tasks.some((t) => t.key === `task-${n}`)) n++;
@@ -62,8 +63,9 @@ export function PlanEditor({ runId, initial, planError, budgetUsd }: Props) {
             <button className="btn accent" type="button" onClick={() => act("run")} disabled={pending || dagErrors.length > 0}>{pending ? "Starting…" : "Run plan"}</button>
           </div>
         </div>
-        <div style={{ overflowX: "auto" }}><TaskGraph tasks={tasks} selected={selected} onSelect={setSelected} /></div>
+        <div style={{ overflowX: "auto" }}><TaskGraph tasks={tasks} selected={selected} onSelect={setSelected} onMove={move} /></div>
         <GraphLegend />
+        <p className="xs muted" style={{ padding: "0 var(--s4) var(--s3)" }}>Keyboard: Tab to a task, Enter to edit it, Alt+↑ or Alt+↓ to move it within its column.</p>
       </div>
 
       {(dagErrors.length > 0 || serverErrors.length > 0) && (
