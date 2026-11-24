@@ -4,7 +4,12 @@ export type BadFixture = { name: string; files: InputFile[]; expectTitle: string
 
 const agent = (fm: string, body = "You review code. Report bugs with file and line.") => `---\n${fm}\n---\n\n${body}\n`;
 /** Built at runtime so no token-shaped literal sits in the repo (GitHub push protection would flag it). */
+// Built from parts so secret scanners don't flag the test file itself.
 const FAKE_GITHUB_TOKEN = ["ghp", "_", "x".repeat(36)].join("");
+const FAKE_GITHUB_PAT = ["github", "_pat_", "1".repeat(22), "_", "a".repeat(40)].join("");
+const FAKE_SLACK_TOKEN = ["xox", "b-", "1234567890-", "abcdefghij"].join("");
+const FAKE_AWS_KEY = ["AK", "IA", "ABCDEFGHIJ234567"].join("");
+const FAKE_STRIPE_KEY = ["sk", "_live_", "x".repeat(24)].join("");
 
 const okAgent = agent("name: reviewer\ndescription: Reviews code\ntools: Read");
 
@@ -37,6 +42,10 @@ export const BAD_FIXTURES: BadFixture[] = [
     severity: "error",
     fixable: true,
   },
+  { name: "fine-grained GitHub token in CLAUDE.md", files: [{ path: "CLAUDE.md", content: `Use token ${FAKE_GITHUB_PAT} for the API.` }], expectTitle: "GitHub fine-grained token", severity: "error", fixable: true },
+  { name: "Slack token in AGENTS.md", files: [{ path: "AGENTS.md", content: `Post to Slack with ${FAKE_SLACK_TOKEN}.` }], expectTitle: "Slack token", severity: "error", fixable: true },
+  { name: "AWS key in GEMINI.md", files: [{ path: "GEMINI.md", content: `aws key: ${FAKE_AWS_KEY}` }], expectTitle: "AWS access key", severity: "error", fixable: true },
+  { name: "Stripe live key in .mcp.json", files: [{ path: ".mcp.json", content: JSON.stringify({ mcpServers: { stripe: { command: "npx", args: ["stripe-mcp"], env: { STRIPE_KEY: FAKE_STRIPE_KEY } } } }) }], expectTitle: "Stripe live key", severity: "error", fixable: true },
   { name: "cursor alwaysApply as string", files: [{ path: ".cursor/rules/a.mdc", content: '---\nalwaysApply: "yes"\n---\nRule.' }], expectTitle: "Invalid format", severity: "error", fixable: false },
   { name: "copilot path file without applyTo", files: [{ path: ".github/instructions/ts.instructions.md", content: "---\ndescription: ts\n---\nUse strict." }], expectTitle: "Invalid format", severity: "error", fixable: false },
   { name: "CLAUDE.local.md not git-ignored", files: [{ path: "CLAUDE.local.md", content: "# me" }, { path: ".gitignore", content: "node_modules\n" }], expectTitle: "Personal notes", severity: "warning", fixable: true },
