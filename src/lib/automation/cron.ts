@@ -96,9 +96,45 @@ export const SCHEDULE_PRESETS = [
   { label: "Every 6 hours", cron: "0 */6 * * *" },
 ] as const;
 
-/** Short plain-English description for the UI. */
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const pad = (n: number) => String(n).padStart(2, "0");
+const only = (set: Set<number>) => (set.size === 1 ? [...set][0]! : undefined);
+
+function describeDays(c: Cron): string | undefined {
+  const [, , dom, mon, dow] = c.sets as [Set<number>, Set<number>, Set<number>, Set<number>, Set<number>];
+  if (mon.size !== 12) return undefined;
+  if (c.domAny && c.dowAny) return "Every day";
+  if (c.dowAny) return only(dom) !== undefined ? `On day ${only(dom)} of every month` : undefined;
+  if (!c.domAny) return undefined;
+  const days = [...new Set([...dow].map((d) => d % 7))].sort();
+  if (days.join() === "1,2,3,4,5") return "Weekdays";
+  if (days.join() === "0,6") return "Weekends";
+  return days.length <= 3 ? `Every ${days.map((d) => DAY_NAMES[d]).join(", ")}` : undefined;
+}
+
+/** Short plain-English description for the UI; falls back to the raw expression for unusual shapes. */
 export function describeCron(expr: string): string {
-  return SCHEDULE_PRESETS.find((p) => p.cron === expr)?.label ?? `Cron "${expr}" (UTC)`;
+  const preset = SCHEDULE_PRESETS.find((p) => p.cron === expr)?.label;
+  if (preset) return preset;
+  const fallback = `Cron "${expr}" (UTC)`;
+  let c: Cron;
+  try {
+    c = parseCron(expr);
+  } catch {
+    return fallback;
+  }
+  const [mi, h] = c.sets as [Set<number>, Set<number>];
+  const minute = only(mi);
+  const days = describeDays(c);
+  if (minute === undefined || !days) return fallback;
+  const hour = only(h);
+  if (hour !== undefined) return `${days} at ${pad(hour)}:${pad(minute)} UTC`;
+  const hours = [...h];
+  const step = hours[1]! - hours[0]!;
+  const evenSteps = hours[0] === 0 && hours.every((v, i) => v === i * step) && 24 % step === 0 && hours.length === 24 / step;
+  if (!evenSteps) return fallback;
+  const every = step === 1 ? "every hour" : `every ${step} hours`;
+  return `${days}, ${every} at :${pad(minute)} UTC`;
 }
 
 /** Guards scheduled runs against tight loops that would burn budget. */

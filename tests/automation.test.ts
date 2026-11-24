@@ -44,6 +44,21 @@ describe("cron schedules", () => {
     expect(minIntervalMinutes("0 9 * * *")).toBe(1440);
     expect(describeCron("0 9 * * *")).toMatch(/Every day/);
   });
+  it("describes common custom schedules in plain English", () => {
+    expect(describeCron("15 18 * * *")).toBe("Every day at 18:15 UTC");
+    expect(describeCron("0 7 * * MON-FRI")).toBe("Weekdays at 07:00 UTC");
+    expect(describeCron("0 10 * * 6,0")).toBe("Weekends at 10:00 UTC");
+    expect(describeCron("30 9 * * 2,4")).toBe("Every Tuesday, Thursday at 09:30 UTC");
+    expect(describeCron("0 6 1 * *")).toBe("On day 1 of every month at 06:00 UTC");
+    expect(describeCron("5 * * * *")).toBe("Every day, every hour at :05 UTC");
+    expect(describeCron("0 */12 * * 1-5")).toBe("Weekdays, every 12 hours at :00 UTC");
+    expect(describeCron("@daily")).toBe("Every day at 00:00 UTC");
+  });
+  it("falls back to the raw expression for shapes it can't phrase", () => {
+    expect(describeCron("0 9 * 6 *")).toBe('Cron "0 9 * 6 *" (UTC)');
+    expect(describeCron("0 8-18/3 * * *")).toBe('Cron "0 8-18/3 * * *" (UTC)');
+    expect(describeCron("not cron")).toBe('Cron "not cron" (UTC)');
+  });
 });
 
 describe("workflow templates", () => {
