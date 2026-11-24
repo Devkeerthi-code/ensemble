@@ -41,7 +41,8 @@ export function retryAfterMs(e: unknown): number | undefined {
 export function scrubError(message: string): string {
   return message
     .replace(/\b(org|proj|user|acct)[_-][A-Za-z0-9]{6,}/g, "[id]")
-    .replace(/\b(sk|gsk|AIza)[\w-]{10,}/g, "[key]")
+    .replace(/\b(sk|gsk|AIza|gh[pousr]_|github_pat_|xox[abposr]-)[\w-]{10,}/g, "[key]")
+    .replace(/\bBearer\s+[\w.-]{10,}/gi, "Bearer [key]")
     .slice(0, 300);
 }
 

@@ -250,6 +250,13 @@ describe("provider rate-limit handling", async () => {
     const s = scrubError("Rate limit for org_01m80fft34ed68vstf38206jhe using key gsk_abcdefghijklmnop");
     expect(s).not.toMatch(/org_01m|gsk_abc/);
   });
+  it("scrubs GitHub, Slack and bearer tokens echoed by tool errors", () => {
+    const gh = ["ghp", "_", "a".repeat(36)].join("");
+    const slack = ["xox", "b-", "1234567890-abc"].join("");
+    const s = scrubError(`401 for ${gh}; slack ${slack}; header Authorization: Bearer abc.def-123456789`);
+    expect(s).not.toMatch(/ghp_a|xoxb-1|abc\.def/);
+    expect(s).toContain("Bearer [key]");
+  });
 });
 
 describe("routing avoids models with unreliable tool use", () => {
