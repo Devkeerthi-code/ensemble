@@ -52,6 +52,31 @@ describe("engine: scheduling", () => {
     expect((await store.loadRun("run1"))!.status).toBe("completed");
   });
 
+  it("refunds unused reserved tokens so cheap calls don't block the next one", async () => {
+    const store = new MemoryStore();
+    store.add(makeRun([task("a"), task("b")]));
+    const llm = fakeLlm();
+    const deps = makeDeps(store, llm, { providers: ["groq"], tpm: 5000 });
+    await startRun(deps, "run1");
+    await processTask(deps, "run1", "a");
+    await processTask(deps, "run1", "b");
+    expect(llm.calls.filter((c) => !c.judge)).toHaveLength(2);
+  });
+
+  it("waits for the provider's tokens-per-minute budget instead of calling", async () => {
+    const store = new MemoryStore();
+    store.add(makeRun([task("a"), task("b")]));
+    // The first call really uses ~4000 tokens, so the bucket can't cover a second call's estimate.
+    const llm = fakeLlm({ behaviour: async () => ({ inputTokens: 1000, outputTokens: 3000 }) });
+    const deps = makeDeps(store, llm, { providers: ["groq"], tpm: 5000 });
+    await startRun(deps, "run1");
+    await processTask(deps, "run1", "a");
+    const second = await processTask(deps, "run1", "b");
+    expect(llm.calls.filter((c) => !c.judge)).toHaveLength(1);
+    expect(second.enqueue).toEqual([expect.objectContaining({ key: "b", delayMs: expect.any(Number) })]);
+    expect(second.enqueue[0]!.delayMs).toBeGreaterThan(0);
+  });
+
   it("is idempotent: a duplicate job for a finished task does nothing", async () => {
     const store = new MemoryStore();
     store.add(makeRun([task("a")]));
