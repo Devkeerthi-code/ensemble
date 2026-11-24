@@ -4,7 +4,7 @@ import Link from "next/link";
 import { startTransition, useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/toast";
-import { deleteWorkflowAction, rotateWebhookAction, runWorkflowNowAction, toggleWorkflowAction, updateWorkflowAction, type WorkflowFormState } from "../actions";
+import { deleteWorkflowAction, duplicateWorkflowAction, rotateWebhookAction, runWorkflowNowAction, toggleWorkflowAction, updateWorkflowAction, type WorkflowFormState } from "../actions";
 import { SettingsFields, type SettingsDefaults } from "../settings-fields";
 
 export function WorkflowControls({ workflowId, enabled }: { workflowId: string; enabled: boolean }) {
@@ -12,6 +12,7 @@ export function WorkflowControls({ workflowId, enabled }: { workflowId: string; 
   const [runId, setRunId] = useState<string | null>(null);
   const [running, startRun] = useTransition();
   const [toggling, startToggle] = useTransition();
+  const [copying, startCopy] = useTransition();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -20,6 +21,11 @@ export function WorkflowControls({ workflowId, enabled }: { workflowId: string; 
     setRunId(res.runId ?? null);
     toast(res.ok ? "Run started. Open it to watch the agents work." : (res.error ?? "Couldn't start the run"), { bad: !res.ok });
     router.refresh();
+  });
+  // On success the action redirects to the copy, so only failures come back here.
+  const duplicate = () => startCopy(async () => {
+    const res = await duplicateWorkflowAction(workflowId);
+    if (!res.ok) toast(res.error ?? "Couldn't copy this workflow", { bad: true });
   });
   const toggle = (next: boolean) => {
     setOn(next);
@@ -41,6 +47,7 @@ export function WorkflowControls({ workflowId, enabled }: { workflowId: string; 
         <span className="toggle"><input type="checkbox" checked={on} disabled={toggling} onChange={(e) => toggle(e.target.checked)} /><i /></span>
         {on ? "On" : "Off"}
       </label>
+      <button className="btn sm" type="button" disabled={copying} onClick={duplicate} title="Copies the plan and settings. The copy starts switched off.">{copying ? "Copying…" : "Duplicate"}</button>
       <button className="btn accent" type="button" disabled={running} onClick={runNow}>{running ? "Starting…" : "Run now"}</button>
       {runId && <Link className="small" href={`/orchestrator/runs/${runId}`}>Open the run</Link>}
     </div>

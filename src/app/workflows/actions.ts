@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { rateLimit } from "@/lib/server/rate-limit";
 import { requireUser } from "@/lib/server/session";
-import { createFromRun, createFromTemplate, deleteWorkflow, ownedWorkflow, rotateWebhookToken, setEnabled, startWorkflowRun, updateSettings, workflowSettingsSchema } from "@/lib/server/automation/workflows";
+import { createFromRun, createFromTemplate, deleteWorkflow, duplicateWorkflow, ownedWorkflow, rotateWebhookToken, setEnabled, startWorkflowRun, updateSettings, workflowSettingsSchema } from "@/lib/server/automation/workflows";
 import { findTemplate } from "@/lib/automation/templates";
 
 export type WorkflowFormState = { error?: string };
@@ -54,6 +54,17 @@ export async function runWorkflowNowAction(workflowId: string): Promise<{ ok: bo
   const res = await startWorkflowRun(wf, "manual");
   revalidatePath(`/workflows/${workflowId}`);
   return res;
+}
+
+export async function duplicateWorkflowAction(workflowId: string): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireUser();
+  if (!id.safeParse(workflowId).success) return { ok: false, error: "Bad workflow id" };
+  const limited = await rateLimit(`wf-create:${user.id}`, 30, 60 * 60);
+  if (!limited.ok) return { ok: false, error: "Too many workflows created this hour." };
+  const res = await duplicateWorkflow(user.id, workflowId);
+  if (!res.ok) return { ok: false, error: res.error };
+  revalidatePath("/workflows");
+  redirect(`/workflows/${res.id}`);
 }
 
 export async function toggleWorkflowAction(workflowId: string, enabled: boolean): Promise<{ ok: boolean }> {

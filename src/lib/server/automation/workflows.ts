@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
 import { minIntervalMinutes, nextRun, parseCron } from "@/lib/automation/cron";
 import { planDelivery, validateDeliveryUrl } from "@/lib/automation/delivery";
+import { copyName } from "@/lib/automation/naming";
 import { findTemplate, instantiate } from "@/lib/automation/templates";
 import { planSchema, type Plan } from "@/lib/orchestrator/dag";
 import { sha256 } from "@/lib/orchestrator/crypto";
@@ -75,6 +76,21 @@ export async function createFromRun(userId: string, runId: string, name: string)
   });
   await audit("workflow_created", { userId, target: wf.id, meta: { fromRun: runId } });
   return { ok: true as const, id: wf.id };
+}
+
+/** Copies the plan and settings. The copy starts off and without a webhook token, so it never doubles up runs or deliveries by surprise. */
+export async function duplicateWorkflow(userId: string, id: string) {
+  const wf = await ownedWorkflow(userId, id);
+  if (!wf) return { ok: false as const, error: "Workflow not found" };
+  const copy = await db.workflow.create({
+    data: {
+      userId, name: copyName(wf.name), template: wf.template, title: wf.title, criteria: wf.criteria, priority: wf.priority, preference: wf.preference,
+      budgetUsd: wf.budgetUsd, plan: wf.plan as Prisma.InputJsonValue, inputs: wf.inputs ?? undefined, schedule: wf.schedule, nextRunAt: null, enabled: false, deliveryUrl: wf.deliveryUrl,
+    },
+    select: { id: true },
+  });
+  await audit("workflow_created", { userId, target: copy.id, meta: { copiedFrom: id } });
+  return { ok: true as const, id: copy.id };
 }
 
 export async function updateSettings(userId: string, id: string, settings: WorkflowSettings) {
