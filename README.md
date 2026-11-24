@@ -37,7 +37,7 @@ Set up AI coding tools safely, with every generated line explained, then run tea
   - files in the wrong folder;
   - broken frontmatter;
   - `bypassPermissions` or catch-all allow rules;
-  - hard-coded API keys;
+  - hard-coded API keys and tokens (Anthropic, OpenAI, Google, Groq, GitHub, Slack, AWS, Stripe live keys, private keys);
   - an exposed `.env`;
   - oversized instruction files.
 
@@ -46,9 +46,9 @@ Set up AI coding tools safely, with every generated line explained, then run tea
 **Orchestrator (Phase 2)**
 - **Goal brief:** goal, success criteria, priority, budget cap and a quality, speed or cost preference.
 - **Planner:** a planner agent writes a task DAG with a skill per task. Cycles, missing dependencies and duplicate keys are rejected before anything runs.
-- **Plan editor:** you review and edit the plan (titles, instructions, acceptance criteria, dependencies, the "important" flag) before pressing Run.
+- **Plan editor:** you review and edit the plan (titles, instructions, acceptance criteria, dependencies, the "important" flag) before pressing Run. From the keyboard, Alt+↑ and Alt+↓ move a task within its column.
 - **Durable queue:** a Postgres-backed queue (pg-boss) and a separate worker. Independent tasks run in parallel. Higher-priority runs and critical-path tasks go first.
-  - Concurrency limits per provider and per user, with retries, backoff and resume after a restart.
+  - Concurrency limits per provider and per user, plus requests-per-minute and tokens-per-minute budgets per provider, with retries, backoff and resume after a restart.
   - Budgets are checked before every model call.
 - **Routing:** one interface over Gemini, Groq, OpenRouter, Anthropic, OpenAI and Ollama.
   - The router blends a capability table with Ensemble's own judge scores, latency and cost, which update after every run.
@@ -73,8 +73,9 @@ Set up AI coding tools safely, with every generated line explained, then run tea
   - "Research a topic and write a brief": three research agents run in parallel, then compare, then write.
   - "Review a GitHub repo": reads the README and file tree, reviews quality and security in parallel, then writes a prioritised report.
   - "Summarise documents and draft a reply": the pasted text goes into the run workspace as data, never into instructions.
-- **Save any finished run as a workflow:** its reviewed plan is reused as-is.
-- **Schedules:** standard 5-field cron in UTC, at most hourly.
+- **Save any finished run as a workflow:** its reviewed plan is reused as-is. Any workflow can be duplicated; the copy starts switched off and without a webhook token.
+- **History:** each workflow page shows its completion rate, average cost and average judge score, plus cost per run as a small chart.
+- **Schedules:** standard 5-field cron in UTC, at most hourly. Names (`MON-FRI`, `JAN`) and shortcuts (`@daily`, `@weekly`) work, and the form describes a custom schedule in plain English with its next run while you type.
   - `/api/cron` is protected by `CRON_SECRET` (Bearer header, constant-time compare) and is meant to be called by cron-job.org.
   - Each due workflow is claimed atomically, so overlapping calls never double-run.
 - **Webhooks:** `POST /api/hooks/<workflowId>` with a per-workflow token (only its hash is stored), optional `{"inputs": {...}}`, and a rate limit.
@@ -248,8 +249,7 @@ CLI: `npm run cli:build`, then `node cli/dist/index.js init --preset <code>`. To
 ## What I'd improve next
 
 - A shared rate limiter across workers (token-aware limiting is done, but per process).
-- Workflow run history charts (cost and quality over time) and a template gallery that users can share.
-- Screenshot-based visual tests and keyboard reordering in the plan graph (Alt+Arrow).
+- Screenshot-based visual tests, and a template gallery that users can share.
 
 ## GitHub
 
