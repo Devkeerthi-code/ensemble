@@ -86,6 +86,22 @@ describe("per-provider and per-user concurrency limits", () => {
     t += 30_000;
     expect(b.take()).toBe(0);
   });
+  it("rate bucket reserves amounts and waits in proportion to the shortfall", () => {
+    let t = 0;
+    const b = new RateBucket(6000, () => t);
+    expect(b.take(4000)).toBe(0);
+    expect(b.take(4000)).toBe(20_000);
+    t += 20_000;
+    expect(b.take(4000)).toBe(0);
+  });
+  it("rate bucket caps oversized amounts and accepts refunds", () => {
+    let t = 0;
+    const b = new RateBucket(1000, () => t);
+    expect(b.take(5000)).toBe(0);
+    expect(b.take(500)).toBeGreaterThan(0);
+    b.refund(600);
+    expect(b.take(500)).toBe(0);
+  });
 });
 
 describe("budget enforcement", () => {

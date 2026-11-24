@@ -85,7 +85,7 @@ export function decideNext(input: { attempt: number; failure?: FailureKind; scor
   return { action: "retry", switchModel: true, delayMs: 0, reason: `Judge scored ${score}/10 (pass mark ${PASS_SCORE}). Retrying on a different model.` };
 }
 
-/** Token bucket per provider, refilled continuously. */
+/** Token bucket per provider, refilled continuously. Counts requests, or tokens when given an amount. */
 export class RateBucket {
   private tokens: number;
   private last: number;
@@ -93,15 +93,27 @@ export class RateBucket {
     this.tokens = perMinute;
     this.last = now();
   }
-  /** Returns 0 if a request may go now, otherwise ms to wait. */
-  take(): number {
+
+  private refill(): void {
     const t = this.now();
     this.tokens = Math.min(this.perMinute, this.tokens + ((t - this.last) / 60_000) * this.perMinute);
     this.last = t;
-    if (this.tokens >= 1) {
-      this.tokens -= 1;
+  }
+
+  /** Returns 0 and deducts if `amount` may go now, otherwise ms to wait (nothing deducted). Amounts above one minute's capacity are capped so they still run. */
+  take(amount = 1): number {
+    this.refill();
+    const need = Math.min(amount, this.perMinute);
+    if (this.tokens >= need) {
+      this.tokens -= need;
       return 0;
     }
-    return Math.ceil(((1 - this.tokens) / this.perMinute) * 60_000);
+    return Math.ceil(((need - this.tokens) / this.perMinute) * 60_000);
+  }
+
+  /** Gives back part of a reservation, e.g. when a call used fewer tokens than estimated. */
+  refund(amount: number): void {
+    this.refill();
+    this.tokens = Math.min(this.perMinute, this.tokens + Math.max(0, amount));
   }
 }
