@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { runHistory } from "@/lib/automation/history";
 import { describeCron, minIntervalMinutes, nextRun, parseCron } from "@/lib/automation/cron";
 import { bearerMatches, deliveryBody, planDelivery, sendDelivery, validateDeliveryUrl } from "@/lib/automation/delivery";
 import { instantiate, TEMPLATES } from "@/lib/automation/templates";
@@ -141,3 +142,23 @@ describe("cron endpoint auth", () => {
     expect(bearerMatches("Bearer ", undefined)).toBe(false);
   });
 });
+
+describe("workflow run history", () => {
+  const run = (day: number, status: string, spentUsd: number, taskScores: Array<number | null>) => ({ status, spentUsd, createdAt: at(`2026-11-${String(day).padStart(2, "0")}T09:00:00Z`), taskScores });
+
+  it("summarises finished runs oldest first", () => {
+    const h = runHistory([run(3, "completed", 0.02, [8, 9]), run(1, "completed", 0.01, [7]), run(2, "failed", 0.004, [null])]);
+    expect(h.points.map((p) => p.at.getUTCDate())).toEqual([1, 2, 3]);
+    expect(h.finished).toBe(3);
+    expect(h.successRate).toBeCloseTo(2 / 3);
+    expect(h.avgCostUsd).toBeCloseTo(0.034 / 3);
+    expect(h.points[2]!.quality).toBe(8.5);
+    expect(h.avgQuality).toBeCloseTo(7.75);
+  });
+
+  it("ignores runs still in progress and handles no data", () => {
+    const h = runHistory([run(1, "running", 0.01, [9]), run(2, "queued", 0, [])]);
+    expect(h).toEqual({ points: [], finished: 0, successRate: null, avgCostUsd: null, avgQuality: null });
+  });
+});
+
