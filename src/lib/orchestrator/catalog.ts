@@ -12,14 +12,17 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
   ollama: "Ollama (local)",
 };
 
-/** Requests per minute and parallel calls Ensemble allows per provider, kept under typical free-tier limits. */
-export const PROVIDER_LIMITS: Record<Provider, { rpm: number; concurrency: number }> = {
-  gemini: { rpm: 10, concurrency: 3 },
-  groq: { rpm: 30, concurrency: 2 },
-  openrouter: { rpm: 20, concurrency: 3 },
-  anthropic: { rpm: 50, concurrency: 4 },
-  openai: { rpm: 60, concurrency: 4 },
-  ollama: { rpm: 120, concurrency: 1 },
+/**
+ * Requests per minute, tokens per minute and parallel calls Ensemble allows per provider,
+ * kept under typical free or entry-tier limits. TPM counts input plus output tokens.
+ */
+export const PROVIDER_LIMITS: Record<Provider, { rpm: number; tpm: number; concurrency: number }> = {
+  gemini: { rpm: 10, tpm: 250_000, concurrency: 3 },
+  groq: { rpm: 30, tpm: 8_000, concurrency: 2 },
+  openrouter: { rpm: 20, tpm: 200_000, concurrency: 3 },
+  anthropic: { rpm: 50, tpm: 30_000, concurrency: 4 },
+  openai: { rpm: 60, tpm: 200_000, concurrency: 4 },
+  ollama: { rpm: 120, tpm: 1_000_000, concurrency: 1 },
 };
 
 export type ModelInfo = {
@@ -65,6 +68,10 @@ export function costUsd(m: Pick<ModelInfo, "inputPerM" | "outputPerM">, inputTok
 }
 
 /** Rough upper bound before a call: ~4 characters per token, plus the full output allowance. */
+export function estimateTokens(promptChars: number, maxOutputTokens: number): number {
+  return Math.ceil(promptChars / 4) + maxOutputTokens;
+}
+
 export function estimateCostUsd(m: ModelInfo, promptChars: number, maxOutputTokens: number): number {
   return costUsd(m, Math.ceil(promptChars / 4), maxOutputTokens);
 }
