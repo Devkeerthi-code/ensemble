@@ -19,6 +19,13 @@ describe("cron schedules", () => {
     const d = nextRun("0 0 1 * 1", at("2026-11-24T00:00:00Z"));
     expect(d.toISOString()).toBe("2026-11-30T00:00:00.000Z");
   });
+  it("accepts month and weekday names in any case", () => {
+    expect(nextRun("30 8 * * MON-FRI", at("2026-11-21T10:00:00Z")).toISOString()).toBe("2026-11-23T08:30:00.000Z");
+    expect(nextRun("0 0 1 jan *", at("2026-11-23T00:00:00Z")).toISOString()).toBe("2027-01-01T00:00:00.000Z");
+    expect(parseCron("0 9 * * sun").sets[4]).toEqual(new Set([0]));
+    expect(() => parseCron("0 9 * * FUN")).toThrow(/not a valid name/);
+    expect(() => parseCron("0 9 MON * *")).toThrow(/not a valid cron value/);
+  });
   it("rejects bad expressions and impossible dates", () => {
     expect(() => parseCron("* * *")).toThrow(/5 fields/);
     expect(() => parseCron("61 * * * *")).toThrow(/range/);

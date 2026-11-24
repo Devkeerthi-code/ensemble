@@ -1,21 +1,34 @@
 /**
  * Minimal 5-field cron (minute hour day-of-month month day-of-week), evaluated in UTC.
  * Supports *, numbers, lists (1,15), ranges (1-5) and steps (*\/15, 8-18/2). Day-of-week 0 or 7 is Sunday.
+ * Months and weekdays also accept English abbreviations (JAN-DEC, SUN-SAT), in any case.
  */
-type Field = { min: number; max: number };
+type Field = { min: number; max: number; names?: string[] };
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const FIELDS: Field[] = [
   { min: 0, max: 59 },
   { min: 0, max: 23 },
   { min: 1, max: 31 },
-  { min: 1, max: 12 },
-  { min: 0, max: 7 },
+  { min: 1, max: 12, names: MONTHS },
+  { min: 0, max: 7, names: WEEKDAYS },
 ];
+
+/** Swaps name abbreviations for their numbers, e.g. MON-FRI -> 1-5, JAN -> 1. */
+function withNumbers(part: string, f: Field): string {
+  if (!f.names) return part;
+  return part.toUpperCase().replace(/[A-Z]{3}/g, (n) => {
+    const i = f.names!.indexOf(n);
+    if (i < 0) throw new Error(`"${n}" is not a valid name here`);
+    return String(i + f.min);
+  });
+}
 
 export type Cron = { sets: Array<Set<number>>; domAny: boolean; dowAny: boolean };
 
 function parseField(part: string, f: Field): Set<number> {
   const out = new Set<number>();
-  for (const item of part.split(",")) {
+  for (const item of withNumbers(part, f).split(",")) {
     const m = item.match(/^(\*|\d+(?:-\d+)?)(?:\/(\d+))?$/);
     if (!m) throw new Error(`"${item}" is not a valid cron value`);
     const step = m[2] ? Number(m[2]) : 1;
