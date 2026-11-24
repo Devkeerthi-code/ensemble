@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { SCHEDULE_PRESETS } from "@/lib/automation/cron";
+import { describeCron, minIntervalMinutes, nextRun, SCHEDULE_PRESETS } from "@/lib/automation/cron";
 
 export type SettingsDefaults = {
   name: string;
@@ -27,12 +27,24 @@ function Seg<T extends string>({ name, legend, options, value }: { name: string;
   );
 }
 
+/** Mirrors the server's checks so mistakes show while typing; the server still validates on save. */
+function previewCron(expr: string): { ok: boolean; text: string } {
+  try {
+    if (minIntervalMinutes(expr) < 60) return { ok: false, text: "This runs more than once an hour. Workflows can run at most hourly." };
+    const next = nextRun(expr, new Date()).toISOString().slice(0, 16).replace("T", " ");
+    return { ok: true, text: `${describeCron(expr)}. Next run: ${next} UTC.` };
+  } catch (e) {
+    return { ok: false, text: (e as Error).message };
+  }
+}
+
 function ScheduleField({ initial }: { initial: string | null }) {
   const preset = SCHEDULE_PRESETS.find((p) => p.cron === initial);
   const [choice, setChoice] = useState<string>(!initial ? "none" : preset ? preset.cron : "custom");
   const [custom, setCustom] = useState(initial && !preset ? initial : "0 9 * * 1");
   const value = choice === "none" ? "" : choice === "custom" ? custom : choice;
   const options = [{ label: "No schedule", cron: "none" }, ...SCHEDULE_PRESETS, { label: "Custom cron", cron: "custom" }];
+  const preview = previewCron(custom);
 
   return (
     <fieldset>
@@ -49,8 +61,9 @@ function ScheduleField({ initial }: { initial: string | null }) {
       {choice === "custom" && (
         <div className="custom-cron field">
           <label htmlFor="cron">Cron expression (minute hour day month weekday)</label>
-          <input id="cron" className="input mono" value={custom} onChange={(e) => setCustom(e.target.value)} maxLength={60} spellCheck={false} autoComplete="off" aria-describedby="cron-hint" />
-          <span id="cron-hint" className="hint">e.g. <code>0 9 * * 1</code> is every Monday at 09:00 UTC.</span>
+          <input id="cron" className="input mono" value={custom} onChange={(e) => setCustom(e.target.value)} maxLength={60} spellCheck={false} autoComplete="off" aria-describedby="cron-hint cron-preview" aria-invalid={!preview.ok} />
+          <span id="cron-hint" className="hint">e.g. <code>0 9 * * MON</code> is every Monday at 09:00 UTC. Shortcuts like <code>@daily</code> work too.</span>
+          <span id="cron-preview" className={preview.ok ? "hint" : "err"} role="status">{preview.text}</span>
         </div>
       )}
       <input type="hidden" name="schedule" value={value} />
