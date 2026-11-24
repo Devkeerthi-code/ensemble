@@ -219,7 +219,7 @@ CLI: `npm run cli:build`, then `node cli/dist/index.js init --preset <code>`. To
 ## Limitations and what breaks at scale
 
 - **Concurrency limits live in one worker process.** Per-provider and per-user limits are counters in memory, so two workers would each allow the full limit. Fix: a DB-backed semaphore, or pg-boss group concurrency keyed by provider.
-- **The limiter counts requests, not tokens.** It doesn't track providers' tokens-per-minute limits; it reacts to 429s instead of preventing them.
+- **Token limits are estimates.** Each call reserves its estimated tokens (prompt characters ÷ 4 plus the output allowance) against the provider's tokens-per-minute limit and refunds what it didn't use. The limits in `catalog.ts` are typical free-tier values, not read from your account, and like the other counters they live in one worker.
 - **SSE polls once a second per open run view.** That's fine for tens of viewers. Thousands would need LISTEN/NOTIFY on a direct connection or a pub/sub service, and Vercel function time limits make SSE reconnect every few minutes.
 - **The capability table is a prior I wrote.** It's based on public benchmarks, not ground truth. Prices are list prices checked on 2026-11-22 and will drift. Cost estimates before a call are upper bounds (characters ÷ 4 plus the full output allowance).
 - **The judge is an LLM.** It can be wrong or lenient, and a judge from a different provider is used when available.
@@ -247,7 +247,7 @@ CLI: `npm run cli:build`, then `node cli/dist/index.js init --preset <code>`. To
 
 ## What I'd improve next
 
-- Token-aware rate limiting per provider and a shared limiter across workers.
+- A shared rate limiter across workers (token-aware limiting is done, but per process).
 - Workflow run history charts (cost and quality over time) and a template gallery that users can share.
 - Screenshot-based visual tests and keyboard reordering in the plan graph (Alt+Arrow).
 
