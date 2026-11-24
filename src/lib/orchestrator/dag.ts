@@ -104,3 +104,21 @@ export function depths(tasks: Pick<PlanTask, "key" | "dependsOn">[]): Map<string
   for (const t of topoOrder(tasks)) out.set(t.key, t.dependsOn.length ? 1 + Math.max(...t.dependsOn.map((d) => out.get(d) ?? 0)) : 0);
   return out;
 }
+
+/**
+ * Moves a task up (-1) or down (+1) among the tasks in its graph column, which is the order the graph draws rows in.
+ * Returns the same array when there is nowhere to move. A broken graph is treated as one column, as the graph draws it.
+ */
+export function moveInColumn<T extends Pick<PlanTask, "key" | "dependsOn">>(tasks: T[], key: string, dir: -1 | 1): T[] {
+  const depth = validateDag(tasks).length ? new Map<string, number>() : depths(tasks);
+  const column = (k: string) => depth.get(k) ?? 0;
+  const from = tasks.findIndex((t) => t.key === key);
+  if (from < 0) return tasks;
+  let to = from + dir;
+  while (to >= 0 && to < tasks.length && column(tasks[to]!.key) !== column(key)) to += dir;
+  if (to < 0 || to >= tasks.length) return tasks;
+  const out = [...tasks];
+  [out[from], out[to]] = [out[to]!, out[from]!];
+  return out;
+}
+

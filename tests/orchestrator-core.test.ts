@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { calculate } from "@/lib/orchestrator/calculator";
 import { MODELS, modelId } from "@/lib/orchestrator/catalog";
 import { open, seal } from "@/lib/orchestrator/crypto";
-import { criticalPathLengths, findCycle, topoOrder, validateDag } from "@/lib/orchestrator/dag";
+import { criticalPathLengths, findCycle, moveInColumn, topoOrder, validateDag } from "@/lib/orchestrator/dag";
 import { backoffMs, checkBudget, classifyError, decideNext, MAX_ATTEMPTS, needsApproval, RateBucket } from "@/lib/orchestrator/policy";
 import { AGENT_SYSTEM, asData, parseJudge, taskPrompt } from "@/lib/orchestrator/prompts";
 import { route, updateScore } from "@/lib/orchestrator/routing";
@@ -95,7 +95,7 @@ describe("per-provider and per-user concurrency limits", () => {
     expect(b.take(4000)).toBe(0);
   });
   it("rate bucket caps oversized amounts and accepts refunds", () => {
-    let t = 0;
+    const t = 0;
     const b = new RateBucket(1000, () => t);
     expect(b.take(5000)).toBe(0);
     expect(b.take(500)).toBeGreaterThan(0);
@@ -263,3 +263,25 @@ describe("routing avoids models with unreliable tool use", () => {
     expect(onlyGroqWeak.model.weakTools).toBe(true);
   });
 });
+
+describe("keyboard reordering in the plan graph", () => {
+  const t = (key: string, dependsOn: string[] = []) => ({ key, dependsOn });
+  const keys = (ts: Array<{ key: string }>) => ts.map((x) => x.key).join(",");
+  // Column 0: a, c. Column 1: b, d.
+  const plan = [t("a"), t("b", ["a"]), t("c"), t("d", ["c"])];
+
+  it("swaps with the nearest task in the same column", () => {
+    expect(keys(moveInColumn(plan, "c", -1))).toBe("c,b,a,d");
+    expect(keys(moveInColumn(plan, "b", 1))).toBe("a,d,c,b");
+  });
+  it("does nothing at the top or bottom of a column, or for unknown keys", () => {
+    expect(moveInColumn(plan, "a", -1)).toBe(plan);
+    expect(moveInColumn(plan, "d", 1)).toBe(plan);
+    expect(moveInColumn(plan, "zzz", 1)).toBe(plan);
+  });
+  it("treats a graph with a cycle as one column", () => {
+    const loop = [t("x", ["y"]), t("y", ["x"])];
+    expect(keys(moveInColumn(loop, "y", -1))).toBe("y,x");
+  });
+});
+
