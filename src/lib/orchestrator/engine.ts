@@ -1,4 +1,4 @@
-import { PROVIDER_LIMITS, costUsd, estimateCostUsd, findModel, modelId, type ModelInfo, type Provider } from "./catalog";
+import { PROVIDER_LIMITS, costUsd, estimateCostUsd, estimateTokens, findModel, modelId, type ModelInfo, type Provider } from "./catalog";
 import { criticalPathLengths, validateDag, type Skill } from "./dag";
 import type { LlmClient, LlmResult } from "./llm";
 import { checkBudget, classifyError, decideNext, needsApproval, RateBucket, retryAfterMs, scrubError, type FailureKind } from "./policy";
@@ -19,6 +19,8 @@ export type EngineDeps = {
   limiter: ConcurrencyLimiter;
   config: EngineConfig;
   buckets?: Map<Provider, RateBucket>;
+  /** Tokens-per-minute buckets, so calls wait before a provider's TPM limit instead of hitting 429s. */
+  tokenBuckets?: Map<Provider, RateBucket>;
   /** Providers that recently returned 429, avoided by routing until the time given. */
   cooldowns?: Map<Provider, number>;
   fetchImpl?: typeof fetch;
@@ -45,6 +47,26 @@ function bucketFor(deps: EngineDeps, provider: Provider): RateBucket {
     deps.buckets.set(provider, b);
   }
   return b;
+}
+
+function tokenBucketFor(deps: EngineDeps, provider: Provider): RateBucket {
+  deps.tokenBuckets ??= new Map();
+  let b = deps.tokenBuckets.get(provider);
+  if (!b) {
+    b = new RateBucket(PROVIDER_LIMITS[provider].tpm);
+    deps.tokenBuckets.set(provider, b);
+  }
+  return b;
+}
+
+/** Reserves one request and the estimated tokens. Returns ms to wait, or 0 with both reserved. */
+function reserveRate(deps: EngineDeps, provider: Provider, tokens: number): number {
+  const tpm = tokenBucketFor(deps, provider);
+  const tokenWait = tpm.take(tokens);
+  if (tokenWait > 0) return tokenWait;
+  const requestWait = bucketFor(deps, provider).take();
+  if (requestWait > 0) tpm.refund(tokens);
+  return requestWait;
 }
 
 function enqueueReady(run: RunSnapshot, tasks: RunTask[]): Enqueue[] {
@@ -196,7 +218,9 @@ export async function processTask(deps: EngineDeps, runId: string, key: string):
     if (!alt) return { enqueue: [{ key, priority: 0, delayMs: 750 }] };
     decision = { model: alt.model, reason: `${busy.label} was the best fit but its provider was at its parallel limit, so this spilled over to ${alt.model.label}, the next best on a free provider (${alt.total.toFixed(2)} vs ${top.toFixed(2)}).` };
   }
-  const wait = bucketFor(deps, decision.model.provider).take();
+  // shortcut: reserves for the primary model only; an "important" task's second copy may use another provider's budget unreserved.
+  const reservedTokens = estimateTokens(prompt.length + AGENT_SYSTEM.length, deps.config.maxOutputTokens);
+  const wait = reserveRate(deps, decision.model.provider, reservedTokens);
   if (wait > 0) {
     deps.limiter.release(decision.model.provider, run.userId);
     return { enqueue: [{ key, priority: 0, delayMs: wait }] };
@@ -227,6 +251,8 @@ export async function processTask(deps: EngineDeps, runId: string, key: string):
   } finally {
     deps.limiter.release(decision.model.provider, run.userId);
   }
+  const primary = attempts.find((a) => a.model.provider === decision.model.provider);
+  if (primary) tokenBucketFor(deps, decision.model.provider).refund(reservedTokens - primary.result.inputTokens - primary.result.outputTokens);
 
   for (const a of attempts) {
     const spend = costUsd(a.model, a.result.inputTokens, a.result.outputTokens) + a.judgeCost;

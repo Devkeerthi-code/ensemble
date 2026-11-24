@@ -3,6 +3,7 @@ import type { PlanTask } from "@/lib/orchestrator/dag";
 import { DEFAULT_CONFIG, type EngineConfig, type EngineDeps } from "@/lib/orchestrator/engine";
 import type { LlmCall, LlmClient, LlmResult } from "@/lib/orchestrator/llm";
 import { JUDGE_SYSTEM } from "@/lib/orchestrator/prompts";
+import { RateBucket } from "@/lib/orchestrator/policy";
 import { ConcurrencyLimiter } from "@/lib/orchestrator/scheduler";
 import { MemoryStore, type RunSnapshot } from "@/lib/orchestrator/store";
 
@@ -62,7 +63,7 @@ export function fakeLlm(opts: { latencyMs?: number; behaviour?: Behaviour; judge
   };
 }
 
-export function makeDeps(store: MemoryStore, llm: LlmClient, opts: { providers?: Provider[]; config?: Partial<EngineConfig>; perProvider?: number; perUser?: number } = {}): EngineDeps {
+export function makeDeps(store: MemoryStore, llm: LlmClient, opts: { providers?: Provider[]; config?: Partial<EngineConfig>; perProvider?: number; perUser?: number; tpm?: number } = {}): EngineDeps {
   const providers = opts.providers ?? ["groq", "gemini", "openrouter"];
   store.creds = Object.fromEntries(providers.map((p) => [p, `test-key-${p}`]));
   const perProvider = Object.fromEntries(providers.map((p) => [p, opts.perProvider ?? 3]));
@@ -71,5 +72,7 @@ export function makeDeps(store: MemoryStore, llm: LlmClient, opts: { providers?:
     llm,
     limiter: new ConcurrencyLimiter({ perProvider, perUser: opts.perUser ?? 10 }),
     config: { ...DEFAULT_CONFIG, dayCapUsd: 10, approvalThresholdUsd: 10, useTools: false, ...opts.config },
+    // Roomy by default so tests don't wait on real tokens-per-minute limits.
+    tokenBuckets: new Map(providers.map((p) => [p, new RateBucket(opts.tpm ?? 10_000_000)])),
   };
 }
