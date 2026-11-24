@@ -1,6 +1,7 @@
 /**
  * Minimal 5-field cron (minute hour day-of-month month day-of-week), evaluated in UTC.
  * Supports *, numbers, lists (1,15), ranges (1-5) and steps (*\/15, 8-18/2). Day-of-week 0 or 7 is Sunday.
+ * Shortcuts @hourly, @daily, @weekly, @monthly and @yearly are expanded to their 5-field form.
  * Months and weekdays also accept English abbreviations (JAN-DEC, SUN-SAT), in any case.
  */
 type Field = { min: number; max: number; names?: string[] };
@@ -41,8 +42,18 @@ function parseField(part: string, f: Field): Set<number> {
   return out;
 }
 
+const MACROS: Record<string, string> = {
+  "@hourly": "0 * * * *",
+  "@daily": "0 0 * * *",
+  "@weekly": "0 0 * * 0",
+  "@monthly": "0 0 1 * *",
+  "@yearly": "0 0 1 1 *",
+  "@annually": "0 0 1 1 *",
+};
+
 export function parseCron(expr: string): Cron {
-  const parts = expr.trim().split(/\s+/);
+  const trimmed = expr.trim();
+  const parts = (MACROS[trimmed.toLowerCase()] ?? trimmed).split(/\s+/);
   if (parts.length !== 5) throw new Error("Use 5 fields: minute hour day month weekday");
   const sets = parts.map((p, i) => parseField(p, FIELDS[i]!));
   if (sets[4]!.has(7)) sets[4]!.add(0);

@@ -26,6 +26,13 @@ describe("cron schedules", () => {
     expect(() => parseCron("0 9 * * FUN")).toThrow(/not a valid name/);
     expect(() => parseCron("0 9 MON * *")).toThrow(/not a valid cron value/);
   });
+  it("expands @daily-style shortcuts", () => {
+    expect(nextRun("@daily", at("2026-11-23T08:00:00Z")).toISOString()).toBe("2026-11-24T00:00:00.000Z");
+    expect(nextRun("@WEEKLY", at("2026-11-23T08:00:00Z")).toISOString()).toBe("2026-11-29T00:00:00.000Z");
+    expect(nextRun("@monthly", at("2026-11-23T08:00:00Z")).toISOString()).toBe("2026-12-01T00:00:00.000Z");
+    expect(minIntervalMinutes("@hourly")).toBe(60);
+    expect(() => parseCron("@sometimes")).toThrow(/5 fields/);
+  });
   it("rejects bad expressions and impossible dates", () => {
     expect(() => parseCron("* * *")).toThrow(/5 fields/);
     expect(() => parseCron("61 * * * *")).toThrow(/range/);
