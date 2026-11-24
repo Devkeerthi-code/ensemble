@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { runHistory } from "@/lib/automation/history";
 import { findTemplate } from "@/lib/automation/templates";
 import { planSchema } from "@/lib/orchestrator/dag";
 import { db } from "@/lib/server/db";
@@ -9,6 +10,7 @@ import { GraphLegend, TaskGraph } from "@/components/task-graph";
 import { RunStatus } from "@/components/run-status";
 import { requestOrigin } from "../origin";
 import { scheduleText, TRIGGER, utc } from "../format";
+import { RunHistory } from "./run-history";
 import { DeleteWorkflow, WebhookPanel, WorkflowControls, WorkflowSettingsForm } from "./workflow-client";
 
 export const metadata: Metadata = { title: "Workflow" };
@@ -21,11 +23,13 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
   const wf = await db.workflow.findFirst({ where: { id, userId: user.id } });
   if (!wf) notFound();
   const [runs, waiting, origin] = await Promise.all([
-    db.run.findMany({ where: { workflowId: wf.id, userId: user.id }, orderBy: { createdAt: "desc" }, take: 15, select: { id: true, status: true, trigger: true, spentUsd: true, createdAt: true } }),
+    db.run.findMany({ where: { workflowId: wf.id, userId: user.id }, orderBy: { createdAt: "desc" }, take: 30, select: { id: true, status: true, trigger: true, spentUsd: true, createdAt: true, tasks: { select: { score: true } } } }),
     db.approval.count({ where: { userId: user.id, status: "pending", run: { workflowId: wf.id } } }),
     requestOrigin(),
   ]);
   const plan = planSchema.safeParse(wf.plan);
+  const history = runHistory(runs.map((r) => ({ status: r.status, spentUsd: Number(r.spentUsd), createdAt: r.createdAt, taskScores: r.tasks.map((t) => t.score) })));
+  const recent = runs.slice(0, 15);
   const tpl = findTemplate(wf.template);
 
   return (
@@ -78,12 +82,12 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
 
         <div className="stack">
           <section className="panel" aria-labelledby="runs-h">
-            <div className="panel-h"><h2 id="runs-h" className="label">Recent runs</h2><span className="xs muted">{runs.length}</span></div>
-            {runs.length === 0 ? (
+            <div className="panel-h"><h2 id="runs-h" className="label">Recent runs</h2><span className="xs muted">{recent.length}</span></div>
+            {recent.length === 0 ? (
               <p className="panel-b small muted">No runs yet. Press &ldquo;Run now&rdquo; to try it, or wait for the schedule.</p>
             ) : (
               <ul className="card-list">
-                {runs.map((r) => (
+                {recent.map((r) => (
                   <li key={r.id}>
                     <div className="stack" style={{ gap: "var(--s1)" }}>
                       <RunStatus status={r.status} />
@@ -94,6 +98,11 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
                 ))}
               </ul>
             )}
+          </section>
+
+          <section className="panel" aria-labelledby="hist-h">
+            <div className="panel-h"><h2 id="hist-h" className="label">History</h2></div>
+            <RunHistory stats={history} />
           </section>
 
           <section className="panel" aria-labelledby="hook-h">
