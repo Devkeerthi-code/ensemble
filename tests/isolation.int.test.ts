@@ -93,6 +93,15 @@ describe("user isolation (database)", async () => {
     expect((await db.workflow.findUnique({ where: { id: aliceWorkflow } }))?.name).toBe("Alice weekly");
   });
 
+  it("Bob can't duplicate Alice's workflow, and Alice's copy starts off with no webhook token", async () => {
+    expect(await wf.duplicateWorkflow(bob, aliceWorkflow)).toMatchObject({ ok: false });
+    expect(await db.workflow.count({ where: { userId: bob } })).toBe(0);
+    const copy = await wf.duplicateWorkflow(alice, aliceWorkflow);
+    if (!copy.ok) throw new Error(copy.error);
+    const row = await db.workflow.findUniqueOrThrow({ where: { id: copy.id } });
+    expect(row).toMatchObject({ userId: alice, name: "Alice weekly (copy)", enabled: false, webhookTokenHash: null });
+  });
+
   it("a webhook token only works for its own workflow", async () => {
     expect((await wf.workflowByWebhookToken(aliceWorkflow, aliceHookToken))?.id).toBe(aliceWorkflow);
     const bobRun = await db.run.create({ data: { userId: bob, goalId: (await db.goal.create({ data: { userId: bob, title: "Bob goal title", criteria: "x", budgetUsd: 1 } })).id, budgetUsd: 1 } });
