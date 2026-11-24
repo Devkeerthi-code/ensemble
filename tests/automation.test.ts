@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { runHistory } from "@/lib/automation/history";
+import { copyName } from "@/lib/automation/naming";
 import { describeCron, minIntervalMinutes, nextRun, parseCron } from "@/lib/automation/cron";
 import { bearerMatches, deliveryBody, planDelivery, sendDelivery, validateDeliveryUrl } from "@/lib/automation/delivery";
 import { instantiate, TEMPLATES } from "@/lib/automation/templates";
@@ -159,6 +160,19 @@ describe("workflow run history", () => {
   it("ignores runs still in progress and handles no data", () => {
     const h = runHistory([run(1, "running", 0.01, [9]), run(2, "queued", 0, [])]);
     expect(h).toEqual({ points: [], finished: 0, successRate: null, avgCostUsd: null, avgQuality: null });
+  });
+});
+
+describe("duplicated workflow names", () => {
+  it("adds and counts up a copy suffix", () => {
+    expect(copyName("Daily digest")).toBe("Daily digest (copy)");
+    expect(copyName("Daily digest (copy)")).toBe("Daily digest (copy 2)");
+    expect(copyName("Daily digest (copy 9)")).toBe("Daily digest (copy 10)");
+  });
+  it("stays within the 80-character name limit", () => {
+    const long = "x".repeat(80);
+    expect(copyName(long)).toHaveLength(80);
+    expect(copyName(long).endsWith(" (copy)")).toBe(true);
   });
 });
 
